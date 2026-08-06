@@ -4,32 +4,39 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>الأطباء والحالات — داشبورد المدير</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css" />
   <link rel="stylesheet" href="assets/style.css" />
   <script src="config.js"></script>
 </head>
 <body>
-  <div id="app-nav"></div>
+  <div class="app-shell">
+    <aside id="app-nav"></aside>
+    <main class="main">
+      <div class="page">
+        <h1>عدد الحالات لكل دكتور</h1>
+        <p class="subtitle">مدخل الحساب اليدوي — اختار الشهر وشوف كل دكتور سجّل كام حالة.</p>
 
-  <div class="page">
-    <h1>عدد الحالات لكل دكتور</h1>
-    <p class="subtitle">مدخل الحساب اليدوي — اختار الشهر وشوف كل دكتور سجّل كام حالة.</p>
+        <div class="toolbar">
+          <label class="muted" for="month-input">الشهر:</label>
+          <input type="month" id="month-input" />
+          <label class="muted" for="workspace-filter">مساحة العمل:</label>
+          <select id="workspace-filter">
+            <option value="">الكل</option>
+          </select>
+        </div>
 
-    <div class="toolbar">
-      <label class="muted" for="month-input">الشهر:</label>
-      <input type="month" id="month-input" />
-      <label class="muted" for="workspace-filter">مساحة العمل:</label>
-      <select id="workspace-filter">
-        <option value="">الكل</option>
-      </select>
-    </div>
+        <div class="stat-row" id="stat-row"></div>
 
-    <div class="stat-row" id="stat-row"></div>
-
-    <div class="card">
-      <div id="table-wrap">
-        <p class="muted">جاري التحميل…</p>
+        <div class="card">
+          <div id="table-wrap">
+            <p class="muted">جاري التحميل…</p>
+          </div>
+        </div>
       </div>
-    </div>
+    </main>
   </div>
 
   <script type="module">
