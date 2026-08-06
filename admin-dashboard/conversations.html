@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>مراجعة المحادثات — داشبورد المدير</title>
+  <link rel="stylesheet" href="assets/style.css" />
+  <script src="config.js"></script>
+</head>
+<body>
+  <div id="app-nav"></div>
+
+  <div class="page">
+    <h1>مراجعة محادثة دكتور↔AI</h1>
+    <p class="subtitle">اختار الدكتور والبوت — كل رد من الـ AI ليه لينك يوديك مباشرة لتنفيذه في n8n.</p>
+
+    <div class="toolbar">
+      <label class="muted" for="doctor-select">الدكتور:</label>
+      <select id="doctor-select">
+        <option value="">اختار دكتور…</option>
+      </select>
+
+      <label class="muted" for="bot-select">البوت:</label>
+      <select id="bot-select">
+        <option value="">كل البوتات</option>
+        <option value="clinic">عيادة</option>
+        <option value="round">راوند</option>
+        <option value="ed">طوارئ</option>
+      </select>
+
+      <button class="btn" id="load-more-btn" style="display:none">تحميل رسايل أقدم</button>
+    </div>
+
+    <div class="card" id="thread-card">
+      <div class="empty-state">اختار دكتور من فوق عشان تشوف محادثته.</div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { supabase, requireAdmin, escapeHtml, fmtDate, n8nExecutionUrl } from "./assets/supabase.js";
+    import { renderNav } from "./assets/nav.js";
+
+    const session = await requireAdmin();
+    if (!session) throw new Error("not authorized");
+    renderNav(session, "conversations");
+
+    const BOT_LABELS = { clinic: "عيادة", round: "راوند", ed: "طوارئ" };
+    const PAGE_SIZE = 100;
+
+    const doctorSelect = document.getElementById("doctor-select");
+    const botSelect = document.getElementById("bot-select");
+    const threadCard = document.getElementById("thread-card");
+    const loadMoreBtn = document.getElementById("load-more-btn");
+
+    let offset = 0;
+    let allMessages = []; // بترتيب الأقدم فالأحدث للعرض
+
+    // قايمة الأطباء — بنجيبها من admin_case_counts لأنها بترجع كل دكتور
+    // بمساحة عمله بغض النظر عن عدد حالاته، فمفيش داعي RPC منفصلة.
+    const { data: doctors, error: docErr } = await supabase.rpc("admin_case_counts");
+    if (docErr) {
+      threadCard.innerHTML = `<p class="error-msg">فشل تحميل قايمة الأطباء: ${escapeHtml(docErr.message)}</p>`;
+    } else {
+      doctorSelect.innerHTML =
+        `<option value="">اختار دكتور…</option>` +
+        (doctors || [])
+          .map(
+            (d) =>
+              `<option value="${d.staff_id}">${escapeHtml(d.full_name)} — ${escapeHtml(d.workspace_name)}</option>`
+          )
+          .join("");
+    }
+
+    function renderThread() {
+      if (allMessages.length === 0) {
+        threadCard.innerHTML = `<div class="empty-state">مفيش رسايل لسه لهذا الاختيار.</div>`;
+        return;
+      }
+
+      threadCard.innerHTML = `<div class="chat-thread">${allMessages.map(bubbleHtml).join("")}</div>`;
+    }
+
+    function bubbleHtml(m) {
+      const isAi = m.role === "ai";
+      const execUrl = n8nExecutionUrl(m.n8n_workflow_id, m.n8n_execution_id);
+
+      let execHtml = "";
+      if (isAi) {
+        execHtml = execUrl
+          ? `<a class="btn-link exec-link" href="${execUrl}" target="_blank" rel="noopener">فتح تنفيذ n8n ↗</a>`
+          : `<span class="muted exec-link">بدون سجل تنفيذ (قبل تفعيل التسجيل)</span>`;
+      }
+
+      return `
+        <div class="bubble ${isAi ? "bubble-ai" : "bubble-human"}">
+          <div class="who">${isAi ? "🤖 AI · " + (BOT_LABELS[m.bot_key] || m.bot_key) : "👨‍⚕️ الدكتور"} ${
+        m.occurred_at ? "· " + fmtDate(m.occurred_at) : ""
+      }</div>
+          <div dir="auto">${escapeHtml(m.content || "")}</div>
+          ${execHtml}
+        </div>
+      `;
+    }
+
+    async function loadPage(staffId, botKey, append) {
+      threadCard.innerHTML = append
+        ? threadCard.innerHTML
+        : `<p class="muted">جاري التحميل…</p>`;
+
+      const { data, error } = await supabase.rpc("admin_conversations_feed", {
+        p_staff_id: staffId,
+        p_bot_key: botKey || null,
+        p_since: null,
+        p_limit: PAGE_SIZE,
+        p_offset: offset,
+      });
+
+      if (error) {
+        threadCard.innerHTML = `<p class="error-msg">فشل تحميل المحادثة: ${escapeHtml(error.message)}</p>`;
+        return;
+      }
+
+      const page = (data || []).slice().reverse(); // من الأقدم للأحدث
+      allMessages = append ? [...page, ...allMessages] : page;
+      loadMoreBtn.style.display = (data || []).length === PAGE_SIZE ? "inline-block" : "none";
+      renderThread();
+    }
+
+    function reload() {
+      offset = 0;
+      allMessages = [];
+      const staffId = doctorSelect.value;
+      if (!staffId) {
+        threadCard.innerHTML = `<div class="empty-state">اختار دكتور من فوق عشان تشوف محادثته.</div>`;
+        loadMoreBtn.style.display = "none";
+        return;
+      }
+      loadPage(staffId, botSelect.value, false);
+    }
+
+    doctorSelect.addEventListener("change", reload);
+    botSelect.addEventListener("change", reload);
+    loadMoreBtn.addEventListener("click", () => {
+      offset += PAGE_SIZE;
+      loadPage(doctorSelect.value, botSelect.value, true);
+    });
+  </script>
+</body>
+</html>

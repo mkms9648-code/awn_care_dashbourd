@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>الأطباء والحالات — داشبورد المدير</title>
+  <link rel="stylesheet" href="assets/style.css" />
+  <script src="config.js"></script>
+</head>
+<body>
+  <div id="app-nav"></div>
+
+  <div class="page">
+    <h1>عدد الحالات لكل دكتور</h1>
+    <p class="subtitle">مدخل الحساب اليدوي — اختار الشهر وشوف كل دكتور سجّل كام حالة.</p>
+
+    <div class="toolbar">
+      <label class="muted" for="month-input">الشهر:</label>
+      <input type="month" id="month-input" />
+      <label class="muted" for="workspace-filter">مساحة العمل:</label>
+      <select id="workspace-filter">
+        <option value="">الكل</option>
+      </select>
+    </div>
+
+    <div class="stat-row" id="stat-row"></div>
+
+    <div class="card">
+      <div id="table-wrap">
+        <p class="muted">جاري التحميل…</p>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { supabase, requireAdmin, escapeHtml, fmtDate } from "./assets/supabase.js";
+    import { renderNav } from "./assets/nav.js";
+
+    const session = await requireAdmin();
+    if (!session) throw new Error("not authorized");
+    renderNav(session, "doctors");
+
+    const monthInput = document.getElementById("month-input");
+    const workspaceFilter = document.getElementById("workspace-filter");
+    const tableWrap = document.getElementById("table-wrap");
+    const statRow = document.getElementById("stat-row");
+
+    // الشهر الحالي كقيمة افتراضية (YYYY-MM)
+    const now = new Date();
+    monthInput.value = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0");
+
+    let rows = [];
+
+    async function load() {
+      tableWrap.innerHTML = `<p class="muted">جاري التحميل…</p>`;
+      const monthValue = monthInput.value ? monthInput.value + "-01" : null;
+
+      const { data, error } = await supabase.rpc("admin_case_counts", { p_month: monthValue });
+      if (error) {
+        tableWrap.innerHTML = `<p class="error-msg">فشل تحميل البيانات: ${escapeHtml(error.message)}</p>`;
+        return;
+      }
+      rows = data || [];
+      populateWorkspaceFilter(rows);
+      render();
+    }
+
+    function populateWorkspaceFilter(data) {
+      const current = workspaceFilter.value;
+      const names = [...new Set(data.map((r) => r.workspace_name))].sort();
+      workspaceFilter.innerHTML =
+        `<option value="">الكل</option>` +
+        names.map((n) => `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join("");
+      workspaceFilter.value = names.includes(current) ? current : "";
+    }
+
+    function render() {
+      const filtered = workspaceFilter.value
+        ? rows.filter((r) => r.workspace_name === workspaceFilter.value)
+        : rows;
+
+      const monthTotal = filtered.reduce((s, r) => s + (r.month_count || 0), 0);
+      statRow.innerHTML = `
+        <div class="stat-tile"><div class="value">${filtered.length}</div><div class="label">دكتور</div></div>
+        <div class="stat-tile"><div class="value">${monthTotal}</div><div class="label">حالة في الشهر ده</div></div>
+      `;
+
+      if (filtered.length === 0) {
+        tableWrap.innerHTML = `<div class="empty-state">مفيش بيانات.</div>`;
+        return;
+      }
+
+      tableWrap.innerHTML = `
+        <table>
+          <thead>
+            <tr>
+              <th>الدكتور</th>
+              <th>التخصص</th>
+              <th>مساحة العمل</th>
+              <th class="num">حالات الشهر</th>
+              <th class="num">إجمالي الحالات</th>
+              <th>آخر حالة</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${filtered
+              .map(
+                (r) => `
+              <tr>
+                <td>
+                  ${escapeHtml(r.full_name)}
+                  ${r.status !== "active" ? `<span class="pill pill-warning">${escapeHtml(r.status)}</span>` : ""}
+                </td>
+                <td class="muted">${escapeHtml(r.specialty || "—")}</td>
+                <td>${escapeHtml(r.workspace_name)}</td>
+                <td class="num">${r.month_count ?? 0}</td>
+                <td class="num">${r.total_count ?? 0}</td>
+                <td class="muted">${fmtDate(r.last_case_at)}</td>
+              </tr>
+            `
+              )
+              .join("")}
+          </tbody>
+        </table>
+      `;
+    }
+
+    monthInput.addEventListener("change", load);
+    workspaceFilter.addEventListener("change", render);
+
+    load();
+  </script>
+</body>
+</html>

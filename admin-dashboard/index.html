@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>نظرة عامة — داشبورد المدير</title>
+  <link rel="stylesheet" href="assets/style.css" />
+  <script src="config.js"></script>
+</head>
+<body>
+  <div id="app-nav"></div>
+
+  <div class="page">
+    <h1>نظرة عامة على الاشتراكات</h1>
+    <p class="subtitle">مين مشترك، في إيه باقة، وبيستخدم فعليًا إيه من البوتات التلاتة.</p>
+
+    <div class="stat-row" id="stat-row"></div>
+
+    <div class="card">
+      <div id="table-wrap">
+        <p class="muted">جاري التحميل…</p>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { supabase, requireAdmin, escapeHtml } from "./assets/supabase.js";
+    import { renderNav } from "./assets/nav.js";
+
+    const session = await requireAdmin();
+    if (!session) throw new Error("not authorized");
+    renderNav(session, "overview");
+
+    const MODULES = [
+      { key: "clinic", label: "عيادة" },
+      { key: "round", label: "راوند" },
+      { key: "ed", label: "طوارئ" },
+    ];
+
+    function moduleBadge(mod, ws) {
+      const used = (ws.modules_used_30d || []).includes(mod.key);
+      const entitled =
+        (ws.entitled_modules || []).includes(mod.key) ||
+        (ws.modules_with_channel || []).includes(mod.key);
+
+      if (used) return `<span class="pill pill-good">${mod.label} · مُستخدم</span>`;
+      if (entitled) return `<span class="pill pill-warning">${mod.label} · متاح بس مش مستخدم</span>`;
+      return `<span class="pill pill-muted">${mod.label} · —</span>`;
+    }
+
+    const { data, error } = await supabase.rpc("admin_workspaces_overview");
+
+    const tableWrap = document.getElementById("table-wrap");
+    const statRow = document.getElementById("stat-row");
+
+    if (error) {
+      tableWrap.innerHTML = `<p class="error-msg">فشل تحميل البيانات: ${escapeHtml(error.message)}</p>`;
+    } else {
+      const workspaces = data || [];
+      const totalDoctors = workspaces.reduce((s, w) => s + (w.active_doctors || 0), 0);
+      const orgsCount = new Set(workspaces.map((w) => w.org_name)).size;
+
+      statRow.innerHTML = `
+        <div class="stat-tile"><div class="value">${orgsCount}</div><div class="label">مؤسسة</div></div>
+        <div class="stat-tile"><div class="value">${workspaces.length}</div><div class="label">مساحة عمل</div></div>
+        <div class="stat-tile"><div class="value">${totalDoctors}</div><div class="label">دكتور نشط</div></div>
+      `;
+
+      if (workspaces.length === 0) {
+        tableWrap.innerHTML = `<div class="empty-state">مفيش مساحات عمل مسجّلة لسه.</div>`;
+      } else {
+        tableWrap.innerHTML = `
+          <table>
+            <thead>
+              <tr>
+                <th>المؤسسة</th>
+                <th>مساحة العمل</th>
+                <th>الباقة</th>
+                <th class="num">أطباء نشطين</th>
+                <th>الوحدات (آخر 30 يوم)</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${workspaces
+                .map(
+                  (w) => `
+                <tr>
+                  <td>${escapeHtml(w.org_name)} <span class="muted">(${escapeHtml(w.org_kind || "")})</span></td>
+                  <td>${escapeHtml(w.workspace_name)}</td>
+                  <td>${w.plan_name ? escapeHtml(w.plan_name) : '<span class="pill pill-critical">بدون باقة</span>'}</td>
+                  <td class="num">${w.active_doctors ?? 0}</td>
+                  <td>${MODULES.map((m) => moduleBadge(m, w)).join(" ")}</td>
+                </tr>
+              `
+                )
+                .join("")}
+            </tbody>
+          </table>
+        `;
+      }
+    }
+  </script>
+</body>
+</html>
