@@ -1,9 +1,9 @@
 import { signOut, escapeHtml } from "./supabase.js";
 
 const LINKS = [
-  { key: "overview", href: "index.html", label: "نظرة عامة" },
-  { key: "doctors", href: "doctors.html", label: "الأطباء والحالات" },
-  { key: "conversations", href: "conversations.html", label: "مراجعة المحادثات" },
+  { key: "overview", href: "index.html", label: "نظرة عامة", icon: "ti-layout-dashboard" },
+  { key: "doctors", href: "doctors.html", label: "الأطباء والحالات", icon: "ti-stethoscope" },
+  { key: "conversations", href: "conversations.html", label: "مراجعة المحادثات", icon: "ti-message-circle" },
 ];
 
 export function renderNav(session, activeKey) {
@@ -11,19 +11,25 @@ export function renderNav(session, activeKey) {
   if (!el) return;
 
   el.innerHTML = `
-    <nav class="topnav">
-      <div class="topnav-brand">داشبورد المدير</div>
-      <div class="topnav-links">
-        ${LINKS.map(
-          (l) =>
-            `<a href="${l.href}" class="${l.key === activeKey ? "active" : ""}">${l.label}</a>`
-        ).join("")}
-      </div>
-      <div class="topnav-user">
-        <span class="muted">${escapeHtml(session.user.email || "")}</span>
-        <button id="signout-btn" class="btn btn-ghost">تسجيل خروج</button>
-      </div>
+    <div class="sidebar-brand">
+      <div class="brand-name">داشبورد <span>المدير</span></div>
+      <div class="brand-sub">Awn Agents</div>
+    </div>
+    <nav class="sidebar-nav">
+      ${LINKS.map(
+        (l) => `
+        <a href="${l.href}" class="sidebar-link ${l.key === activeKey ? "active" : ""}">
+          <i class="ti ${l.icon}"></i>
+          <span>${l.label}</span>
+        </a>`
+      ).join("")}
     </nav>
+    <div class="sidebar-footer">
+      <div class="user-email">${escapeHtml(session.user.email || "")}</div>
+      <button id="signout-btn" class="btn btn-ghost" style="width:100%; justify-content:center;">
+        <i class="ti ti-logout"></i> تسجيل خروج
+      </button>
+    </div>
   `;
 
   document.getElementById("signout-btn").addEventListener("click", signOut);
