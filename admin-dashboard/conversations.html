@@ -4,36 +4,43 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>مراجعة المحادثات — داشبورد المدير</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css" />
   <link rel="stylesheet" href="assets/style.css" />
   <script src="config.js"></script>
 </head>
 <body>
-  <div id="app-nav"></div>
+  <div class="app-shell">
+    <aside id="app-nav"></aside>
+    <main class="main">
+      <div class="page">
+        <h1>مراجعة محادثة دكتور↔AI</h1>
+        <p class="subtitle">اختار الدكتور والبوت — كل رد من الـ AI ليه لينك يوديك مباشرة لتنفيذه في n8n.</p>
 
-  <div class="page">
-    <h1>مراجعة محادثة دكتور↔AI</h1>
-    <p class="subtitle">اختار الدكتور والبوت — كل رد من الـ AI ليه لينك يوديك مباشرة لتنفيذه في n8n.</p>
+        <div class="toolbar">
+          <label class="muted" for="doctor-select">الدكتور:</label>
+          <select id="doctor-select">
+            <option value="">اختار دكتور…</option>
+          </select>
 
-    <div class="toolbar">
-      <label class="muted" for="doctor-select">الدكتور:</label>
-      <select id="doctor-select">
-        <option value="">اختار دكتور…</option>
-      </select>
+          <label class="muted" for="bot-select">البوت:</label>
+          <select id="bot-select">
+            <option value="">كل البوتات</option>
+            <option value="clinic">عيادة</option>
+            <option value="round">راوند</option>
+            <option value="ed">طوارئ</option>
+          </select>
 
-      <label class="muted" for="bot-select">البوت:</label>
-      <select id="bot-select">
-        <option value="">كل البوتات</option>
-        <option value="clinic">عيادة</option>
-        <option value="round">راوند</option>
-        <option value="ed">طوارئ</option>
-      </select>
+          <button class="btn" id="load-more-btn" style="display:none">تحميل رسايل أقدم</button>
+        </div>
 
-      <button class="btn" id="load-more-btn" style="display:none">تحميل رسايل أقدم</button>
-    </div>
-
-    <div class="card" id="thread-card">
-      <div class="empty-state">اختار دكتور من فوق عشان تشوف محادثته.</div>
-    </div>
+        <div class="card" id="thread-card">
+          <div class="empty-state">اختار دكتور من فوق عشان تشوف محادثته.</div>
+        </div>
+      </div>
+    </main>
   </div>
 
   <script type="module">
