@@ -9,5 +9,5 @@ window.APP_CONFIG = {
 
   // رابط n8n بتاعك (من غير / في الآخر) — عشان لينك التنفيذ يشتغل صح
   // مثال: https://n8n.yourdomain.com
-  N8N_BASE_URL: "https://n8n-c1bz.srv1841520.com",
+  N8N_BASE_URL: "https://n8n-c1bz.srv1841520.hstgr.cloud",
 };
