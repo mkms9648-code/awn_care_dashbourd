@@ -30,8 +30,13 @@
         </div>
 
         <div class="chatapp-thread">
-          <div class="chatapp-thread-header" id="thread-header">
-            <span class="muted">اختار محادثة من القايمة عشان تشوف تفاصيلها</span>
+          <div class="chatapp-thread-header">
+            <button type="button" id="back-to-list-btn" class="icon-btn thread-back-btn" title="رجوع للقايمة">
+              <i class="ti ti-arrow-right"></i>
+            </button>
+            <div id="thread-header-info">
+              <span class="muted">اختار محادثة من القايمة عشان تشوف تفاصيلها</span>
+            </div>
           </div>
           <div class="chatapp-thread-body" id="thread-body">
             <div class="empty-state">
@@ -56,10 +61,14 @@
     const BOT_ICONS = { clinic: "ti-building-hospital", round: "ti-walk", ed: "ti-ambulance" };
     const PAGE_SIZE = 300;
 
+    const chatappEl = document.querySelector(".chatapp");
     const listEl = document.getElementById("chat-list");
     const searchInput = document.getElementById("search-input");
-    const threadHeader = document.getElementById("thread-header");
+    const threadHeaderInfo = document.getElementById("thread-header-info");
     const threadBody = document.getElementById("thread-body");
+    const backToListBtn = document.getElementById("back-to-list-btn");
+
+    backToListBtn.addEventListener("click", () => chatappEl.classList.remove("thread-open"));
 
     let channels = [];
     let activeChannel = null;
@@ -149,8 +158,9 @@
     async function openChannel(channel) {
       activeChannel = channel;
       renderList(currentFiltered());
+      chatappEl.classList.add("thread-open"); // في شاشة الموبايل: يخفي القايمة ويوري المحادثة بس
 
-      threadHeader.innerHTML = `
+      threadHeaderInfo.innerHTML = `
         <div class="chat-avatar">${initials(channel.full_name)}</div>
         <div>
           <div class="title">${escapeHtml(channel.full_name)}</div>

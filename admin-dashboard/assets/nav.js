@@ -28,7 +28,7 @@ export function renderNav(session, activeKey) {
     <div class="sidebar-footer">
       <div class="user-email">${escapeHtml(session.user.email || "")}</div>
       <button id="signout-btn" class="btn btn-ghost" style="width:100%; justify-content:center;">
-        <i class="ti ti-logout"></i> تسجيل خروج
+        <i class="ti ti-logout"></i> <span>تسجيل خروج</span>
       </button>
     </div>
   `;
