@@ -15,29 +15,30 @@
   <div class="app-shell">
     <aside id="app-nav"></aside>
     <main class="main">
-      <div class="page">
-        <h1>مراجعة محادثة دكتور↔AI</h1>
-        <p class="subtitle">اختار الدكتور والبوت — كل رد من الـ AI ليه لينك يوديك مباشرة لتنفيذه في n8n.</p>
-
-        <div class="toolbar">
-          <label class="muted" for="doctor-select">الدكتور:</label>
-          <select id="doctor-select">
-            <option value="">اختار دكتور…</option>
-          </select>
-
-          <label class="muted" for="bot-select">البوت:</label>
-          <select id="bot-select">
-            <option value="">كل البوتات</option>
-            <option value="clinic">عيادة</option>
-            <option value="round">راوند</option>
-            <option value="ed">طوارئ</option>
-          </select>
-
-          <button class="btn" id="load-more-btn" style="display:none">تحميل رسايل أقدم</button>
+      <div class="chatapp">
+        <div class="chatapp-list">
+          <div class="chatapp-list-header">
+            <h2>المحادثات</h2>
+            <div class="search-box">
+              <i class="ti ti-search"></i>
+              <input type="text" id="search-input" placeholder="ابحث بالاسم…" />
+            </div>
+          </div>
+          <div class="chatapp-list-items" id="chat-list">
+            <p class="muted" style="padding: 16px;">جاري التحميل…</p>
+          </div>
         </div>
 
-        <div class="card" id="thread-card">
-          <div class="empty-state">اختار دكتور من فوق عشان تشوف محادثته.</div>
+        <div class="chatapp-thread">
+          <div class="chatapp-thread-header" id="thread-header">
+            <span class="muted">اختار محادثة من القايمة عشان تشوف تفاصيلها</span>
+          </div>
+          <div class="chatapp-thread-body" id="thread-body">
+            <div class="empty-state">
+              <i class="ti ti-message-2" style="font-size: 2em; display: block; margin-bottom: 10px;"></i>
+              اختار محادثة من القايمة
+            </div>
+          </div>
         </div>
       </div>
     </main>
@@ -52,105 +53,164 @@
     renderNav(session, "conversations");
 
     const BOT_LABELS = { clinic: "عيادة", round: "راوند", ed: "طوارئ" };
-    const PAGE_SIZE = 100;
+    const BOT_ICONS = { clinic: "ti-building-hospital", round: "ti-walk", ed: "ti-ambulance" };
+    const PAGE_SIZE = 300;
 
-    const doctorSelect = document.getElementById("doctor-select");
-    const botSelect = document.getElementById("bot-select");
-    const threadCard = document.getElementById("thread-card");
-    const loadMoreBtn = document.getElementById("load-more-btn");
+    const listEl = document.getElementById("chat-list");
+    const searchInput = document.getElementById("search-input");
+    const threadHeader = document.getElementById("thread-header");
+    const threadBody = document.getElementById("thread-body");
 
-    let offset = 0;
-    let allMessages = []; // بترتيب الأقدم فالأحدث للعرض
+    let channels = [];
+    let activeChannel = null;
 
-    // قايمة الأطباء — بنجيبها من admin_case_counts لأنها بترجع كل دكتور
-    // بمساحة عمله بغض النظر عن عدد حالاته، فمفيش داعي RPC منفصلة.
-    const { data: doctors, error: docErr } = await supabase.rpc("admin_case_counts");
-    if (docErr) {
-      threadCard.innerHTML = `<p class="error-msg">فشل تحميل قايمة الأطباء: ${escapeHtml(docErr.message)}</p>`;
-    } else {
-      doctorSelect.innerHTML =
-        `<option value="">اختار دكتور…</option>` +
-        (doctors || [])
-          .map(
-            (d) =>
-              `<option value="${d.staff_id}">${escapeHtml(d.full_name)} — ${escapeHtml(d.workspace_name)}</option>`
-          )
-          .join("");
+    function initials(name) {
+      const parts = (name || "").trim().split(/\s+/).filter(Boolean);
+      if (parts.length === 0) return "?";
+      return (parts[0][0] + (parts[1] ? parts[1][0] : "")).toUpperCase();
     }
 
-    function renderThread() {
-      if (allMessages.length === 0) {
-        threadCard.innerHTML = `<div class="empty-state">مفيش رسايل لسه لهذا الاختيار.</div>`;
+    // بيشيل السطور التقنية (التاريخ/الـ IDs) اللي n8n بيحطها قبل كلام الدكتور
+    // فعليًا، عشان الدكتور يبان زي ما قاله بالظبط من غير ضوضاء.
+    function cleanHumanText(raw) {
+      if (!raw) return raw;
+      let text = raw;
+      if (/^current date and time/i.test(text.trim())) {
+        const idx = text.indexOf("\n\n");
+        if (idx !== -1) text = text.slice(idx + 2);
+      }
+      text = text.replace(/^رسالة الدكتور:?\s*\n/, "");
+      return text.trim();
+    }
+
+    // بوت الراوند بيرد بـ JSON خام ({echo, ask, ...}) — نطلع منه نص مقروء.
+    function cleanAiText(raw) {
+      if (!raw) return raw;
+      const trimmed = raw.trim();
+      if (trimmed.startsWith("{")) {
+        try {
+          const parsed = JSON.parse(trimmed);
+          let out = parsed.echo || parsed.message || parsed.text || "";
+          if (parsed.ask && parsed.ask !== out) out += (out ? "\n\n" : "") + "❓ " + parsed.ask;
+          return out || raw;
+        } catch (e) {
+          return raw;
+        }
+      }
+      return raw;
+    }
+
+    function currentFiltered() {
+      const q = searchInput.value.trim().toLowerCase();
+      if (!q) return channels;
+      return channels.filter((c) => (c.full_name || "").toLowerCase().includes(q));
+    }
+
+    function renderList(items) {
+      if (items.length === 0) {
+        listEl.innerHTML = `<div class="empty-state">مفيش محادثات مطابقة.</div>`;
         return;
       }
 
-      threadCard.innerHTML = `<div class="chat-thread">${allMessages.map(bubbleHtml).join("")}</div>`;
+      listEl.innerHTML = items
+        .map((c) => {
+          const idx = channels.indexOf(c);
+          const isActive = activeChannel === c;
+          return `
+            <div class="chat-row ${isActive ? "active" : ""}" data-index="${idx}">
+              <div class="chat-avatar">${initials(c.full_name)}</div>
+              <div class="chat-row-info">
+                <div class="chat-row-name">${escapeHtml(c.full_name)}</div>
+                <div class="chat-row-meta">
+                  <i class="ti ${BOT_ICONS[c.bot_key] || "ti-message-circle"}"></i>
+                  ${BOT_LABELS[c.bot_key] || c.bot_key} · ${escapeHtml(c.workspace_name)}
+                </div>
+              </div>
+            </div>`;
+        })
+        .join("");
+
+      listEl.querySelectorAll(".chat-row").forEach((row) => {
+        row.addEventListener("click", () => openChannel(channels[Number(row.dataset.index)]));
+      });
     }
 
-    function bubbleHtml(m) {
-      const isAi = m.role === "ai";
-      const execUrl = n8nExecutionUrl(m.n8n_workflow_id, m.n8n_execution_id);
-
-      let execHtml = "";
-      if (isAi) {
-        execHtml = execUrl
-          ? `<a class="btn-link exec-link" href="${execUrl}" target="_blank" rel="noopener">فتح تنفيذ n8n ↗</a>`
-          : `<span class="muted exec-link">بدون سجل تنفيذ (قبل تفعيل التسجيل)</span>`;
+    async function loadChannels() {
+      const { data, error } = await supabase.rpc("admin_doctor_channels");
+      if (error) {
+        listEl.innerHTML = `<p class="error-msg" style="padding: 16px;">${escapeHtml(error.message)}</p>`;
+        return;
       }
+      channels = data || [];
+      renderList(currentFiltered());
+    }
 
-      return `
-        <div class="bubble ${isAi ? "bubble-ai" : "bubble-human"}">
-          <div class="who">${isAi ? "🤖 AI · " + (BOT_LABELS[m.bot_key] || m.bot_key) : "👨‍⚕️ الدكتور"} ${
-        m.occurred_at ? "· " + fmtDate(m.occurred_at) : ""
-      }</div>
-          <div dir="auto">${escapeHtml(m.content || "")}</div>
-          ${execHtml}
+    async function openChannel(channel) {
+      activeChannel = channel;
+      renderList(currentFiltered());
+
+      threadHeader.innerHTML = `
+        <div class="chat-avatar">${initials(channel.full_name)}</div>
+        <div>
+          <div class="title">${escapeHtml(channel.full_name)}</div>
+          <div class="subtitle">${escapeHtml(channel.workspace_name)} · ${BOT_LABELS[channel.bot_key] || channel.bot_key}</div>
         </div>
       `;
-    }
-
-    async function loadPage(staffId, botKey, append) {
-      threadCard.innerHTML = append
-        ? threadCard.innerHTML
-        : `<p class="muted">جاري التحميل…</p>`;
+      threadBody.innerHTML = `<p class="muted">جاري التحميل…</p>`;
 
       const { data, error } = await supabase.rpc("admin_conversations_feed", {
-        p_staff_id: staffId,
-        p_bot_key: botKey || null,
+        p_staff_id: channel.staff_id,
+        p_bot_key: channel.bot_key,
         p_since: null,
         p_limit: PAGE_SIZE,
-        p_offset: offset,
+        p_offset: 0,
       });
 
       if (error) {
-        threadCard.innerHTML = `<p class="error-msg">فشل تحميل المحادثة: ${escapeHtml(error.message)}</p>`;
+        threadBody.innerHTML = `<p class="error-msg">${escapeHtml(error.message)}</p>`;
         return;
       }
 
-      const page = (data || []).slice().reverse(); // من الأقدم للأحدث
-      allMessages = append ? [...page, ...allMessages] : page;
-      loadMoreBtn.style.display = (data || []).length === PAGE_SIZE ? "inline-block" : "none";
-      renderThread();
+      renderThread((data || []).slice().reverse());
     }
 
-    function reload() {
-      offset = 0;
-      allMessages = [];
-      const staffId = doctorSelect.value;
-      if (!staffId) {
-        threadCard.innerHTML = `<div class="empty-state">اختار دكتور من فوق عشان تشوف محادثته.</div>`;
-        loadMoreBtn.style.display = "none";
+    function renderThread(messages) {
+      if (messages.length === 0) {
+        threadBody.innerHTML = `<div class="empty-state">مفيش رسايل لسه في المحادثة دي.</div>`;
         return;
       }
-      loadPage(staffId, botSelect.value, false);
+
+      let prevRole = null;
+      threadBody.innerHTML = messages
+        .map((m) => {
+          const isAi = m.role === "ai";
+          const grouped = prevRole === m.role;
+          prevRole = m.role;
+
+          const text = isAi ? cleanAiText(m.content) : cleanHumanText(m.content);
+          const execUrl = n8nExecutionUrl(m.n8n_workflow_id, m.n8n_execution_id);
+
+          let meta = m.occurred_at ? fmtDate(m.occurred_at) : "";
+          if (isAi) {
+            meta += execUrl
+              ? ` · <a class="btn-link exec-link" href="${execUrl}" target="_blank" rel="noopener">فتح التنفيذ ↗</a>`
+              : ` · <span class="muted">بدون سجل تنفيذ</span>`;
+          }
+
+          return `
+            <div class="bubble ${isAi ? "bubble-ai" : "bubble-human"} ${grouped ? "grouped" : ""}">
+              <div dir="auto">${escapeHtml(text || "")}</div>
+              ${meta ? `<div class="bubble-time">${meta}</div>` : ""}
+            </div>`;
+        })
+        .join("");
+
+      threadBody.scrollTop = threadBody.scrollHeight;
     }
 
-    doctorSelect.addEventListener("change", reload);
-    botSelect.addEventListener("change", reload);
-    loadMoreBtn.addEventListener("click", () => {
-      offset += PAGE_SIZE;
-      loadPage(doctorSelect.value, botSelect.value, true);
-    });
+    searchInput.addEventListener("input", () => renderList(currentFiltered()));
+
+    loadChannels();
   </script>
 </body>
 </html>

@@ -20,11 +20,14 @@
 
 ### 1) شغّل المايجريشن في Supabase
 
-من Supabase Dashboard → SQL Editor، نفّذ ملف
-`../migrations/020_admin_dashboard.sql` (لو لسه ما اتنفّذش). ده بيضيف:
-- جدول `flow_execution_log` (سجل تنفيذات n8n)
-- جدول `app_admins` (مين مسموح له يدخل الداشبورد)
-- الدوال `admin_conversations_feed` / `admin_case_counts` / `admin_workspaces_overview`
+من Supabase Dashboard → SQL Editor، نفّذ الملفين (بالترتيب) لو لسه ما اتنفّذوش:
+- `../migrations/020_admin_dashboard.sql` — بيضيف:
+  - جدول `flow_execution_log` (سجل تنفيذات n8n)
+  - جدول `app_admins` (مين مسموح له يدخل الداشبورد)
+  - الدوال `admin_conversations_feed` / `admin_case_counts` / `admin_workspaces_overview`
+- `../migrations/021_admin_doctor_channels.sql` — بيضيف دالة `admin_doctor_channels`
+  اللي بتغذّي قايمة "المحادثات" في صفحة مراجعة المحادثات (زي قايمة الشاتس في أي
+  تطبيق مراسلة).
 
 ### 2) حدّث الـ 3 ورك-فلوز في n8n
 

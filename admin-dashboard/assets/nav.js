@@ -10,6 +10,7 @@ export function renderNav(session, activeKey) {
   const el = document.getElementById("app-nav");
   if (!el) return;
 
+  el.classList.add("sidebar");
   el.innerHTML = `
     <div class="sidebar-brand">
       <div class="brand-name">داشبورد <span>المدير</span></div>
