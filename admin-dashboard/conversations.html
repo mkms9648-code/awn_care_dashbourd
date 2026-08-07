@@ -63,6 +63,7 @@
 
     let channels = [];
     let activeChannel = null;
+    const messagesById = new Map(); // msg_id -> { original, translated, showing }
 
     function initials(name) {
       const parts = (name || "").trim().split(/\s+/).filter(Boolean);
@@ -180,7 +181,9 @@
         return;
       }
 
+      messagesById.clear();
       let prevRole = null;
+
       threadBody.innerHTML = messages
         .map((m) => {
           const isAi = m.role === "ai";
@@ -188,25 +191,102 @@
           prevRole = m.role;
 
           const text = isAi ? cleanAiText(m.content) : cleanHumanText(m.content);
+          messagesById.set(String(m.msg_id), { original: text || "", translated: null, showing: false });
+
           const execUrl = n8nExecutionUrl(m.n8n_workflow_id, m.n8n_execution_id);
 
-          let meta = m.occurred_at ? fmtDate(m.occurred_at) : "";
-          if (isAi) {
-            meta += execUrl
-              ? ` · <a class="btn-link exec-link" href="${execUrl}" target="_blank" rel="noopener">فتح التنفيذ ↗</a>`
-              : ` · <span class="muted">بدون سجل تنفيذ</span>`;
-          }
+          const execBtn = isAi
+            ? execUrl
+              ? `<a class="icon-btn" href="${execUrl}" target="_blank" rel="noopener" title="افتح التنفيذ في n8n">
+                   <i class="ti ti-git-branch"></i>
+                 </a>`
+              : `<span class="icon-btn" style="opacity:.4; cursor:default;" title="بدون سجل تنفيذ (قبل تفعيل التسجيل)">
+                   <i class="ti ti-git-branch-off"></i>
+                 </span>`
+            : "";
 
           return `
-            <div class="bubble ${isAi ? "bubble-ai" : "bubble-human"} ${grouped ? "grouped" : ""}">
-              <div dir="auto">${escapeHtml(text || "")}</div>
-              ${meta ? `<div class="bubble-time">${meta}</div>` : ""}
+            <div class="bubble ${isAi ? "bubble-ai" : "bubble-human"} ${grouped ? "grouped" : ""}" data-msg-id="${m.msg_id}">
+              <div class="bubble-text" dir="auto">${escapeHtml(text || "")}</div>
+              <div class="bubble-time">
+                <span>${m.occurred_at ? fmtDate(m.occurred_at) : ""}</span>
+                <button type="button" class="icon-btn translate-btn" title="ترجم للعربي">
+                  <i class="ti ti-language"></i>
+                </button>
+                ${execBtn}
+              </div>
             </div>`;
         })
         .join("");
 
       threadBody.scrollTop = threadBody.scrollHeight;
     }
+
+    // ترجمة سريعة عن طريق Google Translate (بدون مفتاح API — نداء مباشر من
+    // المتصفح). خدمة غير رسمية، فممكن تتعطل أو تتقيّد أحيانًا؛ لو حصل كده
+    // بنوريه رسالة واضحة بدل ما نفضل معلّقين.
+    async function translateToArabic(text) {
+      const url =
+        "https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=ar&dt=t&q=" +
+        encodeURIComponent(text);
+      const res = await fetch(url);
+      if (!res.ok) throw new Error("translate_failed");
+      const data = await res.json();
+      return (data[0] || []).map((seg) => seg[0]).join("");
+    }
+
+    threadBody.addEventListener("click", async (e) => {
+      const btn = e.target.closest(".translate-btn");
+      if (!btn) return;
+
+      const bubbleEl = btn.closest(".bubble");
+      const msgId = bubbleEl.dataset.msgId;
+      const state = messagesById.get(msgId);
+      if (!state) return;
+
+      const textEl = bubbleEl.querySelector(".bubble-text");
+
+      // ارجاع النص الأصلي — من غير ما نطلب ترجمة تانية.
+      if (state.showing) {
+        state.showing = false;
+        textEl.textContent = state.original;
+        btn.classList.remove("active");
+        btn.title = "ترجم للعربي";
+        return;
+      }
+
+      if (state.translated) {
+        state.showing = true;
+        textEl.textContent = state.translated;
+        btn.classList.add("active");
+        btn.title = "ارجع للنص الأصلي";
+        return;
+      }
+
+      const prevIcon = btn.innerHTML;
+      btn.innerHTML = `<i class="ti ti-loader-2" style="animation: spin 0.8s linear infinite;"></i>`;
+      btn.disabled = true;
+
+      try {
+        const translated = await translateToArabic(state.original);
+        state.translated = translated;
+        state.showing = true;
+        textEl.textContent = translated;
+        btn.classList.add("active");
+        btn.title = "ارجع للنص الأصلي";
+      } catch (err) {
+        textEl.insertAdjacentHTML(
+          "afterend",
+          `<div class="translate-error">تعذّرت الترجمة، حاول تاني</div>`
+        );
+        setTimeout(() => {
+          bubbleEl.querySelector(".translate-error")?.remove();
+        }, 3000);
+      } finally {
+        btn.innerHTML = prevIcon;
+        btn.disabled = false;
+      }
+    });
 
     searchInput.addEventListener("input", () => renderList(currentFiltered()));
 
