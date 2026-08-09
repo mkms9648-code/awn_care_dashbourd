@@ -1,0 +1,90 @@
+{
+  "name": "Sales Assistant (Awn Admin)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "sales-assistant",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "b1a1a111-1111-4111-8111-111111111111",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0],
+      "webhookId": "sales-assistant"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://kaqoozpuvdvernvlmqbk.supabase.co/rest/v1/rpc/sales_kb_get",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "sb_publishable_eDVjcLea7223PDB1seW-kQ_s0K5P-fP" },
+            { "name": "Authorization", "value": "Bearer sb_publishable_eDVjcLea7223PDB1seW-kQ_s0K5P-fP" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ p_product: $json.body.product }) }}",
+        "options": {}
+      },
+      "id": "b2a2a222-2222-4222-8222-222222222222",
+      "name": "Get KB",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [220, 0]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $('Webhook').item.json.body.message }}",
+        "options": {
+          "systemMessage": "={{ $json.persona }}\n\n=== معلومات المشروع (استخدمها كمصدر وحيد للحقائق) ===\n{{ $json.knowledge }}\n\nتعليمات: رد باللغة العربية بنبرة محترمة وتسويقية تحل المشاكل. لو معلومة مش موجودة فوق، قول إنك هتتأكد وترجع، وما تخترعش أسعار أو تفاصيل."
+        }
+      },
+      "id": "b3a3a333-3333-4333-8333-333333333333",
+      "name": "Sales Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [460, 0]
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-2.0-flash",
+        "options": {}
+      },
+      "id": "b4a4a444-4444-4444-8444-444444444444",
+      "name": "Google Gemini Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [460, 200],
+      "credentials": {
+        "googlePalmApi": { "id": "REPLACE_WITH_YOUR_GEMINI_CREDENTIAL", "name": "Google Gemini" }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ reply: $json.output }) }}",
+        "options": {}
+      },
+      "id": "b5a5a555-5555-4555-8555-555555555555",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [820, 0]
+    }
+  ],
+  "connections": {
+    "Webhook": { "main": [[{ "node": "Get KB", "type": "main", "index": 0 }]] },
+    "Get KB": { "main": [[{ "node": "Sales Agent", "type": "main", "index": 0 }]] },
+    "Google Gemini Chat Model": { "ai_languageModel": [[{ "node": "Sales Agent", "type": "ai_languageModel", "index": 0 }]] },
+    "Sales Agent": { "main": [[{ "node": "Respond", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "pinData": {}
+}

@@ -10,12 +10,14 @@ const NAV = {
     { key: "subscriptions", file: "subscriptions.html", label: "الاشتراكات والتحكم", icon: "ti-toggle-right-filled" },
     { key: "doctors",       file: "doctors.html",       label: "الأطباء والدخول",   icon: "ti-user-cog" },
     { key: "conversations", file: "conversations.html", label: "المحادثات",         icon: "ti-message-circle" },
+    { key: "assistant",     file: "assistant.html",     label: "مساعد المبيعات",    icon: "ti-sparkles" },
   ],
   fathi: [
     { key: "overview",      file: "overview.html",      label: "نظرة عامة",        icon: "ti-layout-dashboard" },
     { key: "subscriptions", file: "subscriptions.html", label: "الاشتراكات والتحكم", icon: "ti-toggle-right-filled" },
     { key: "clients",       file: "clients.html",       label: "العملاء والدخول",   icon: "ti-user-cog" },
     { key: "conversations", file: "conversations.html", label: "المحادثات",         icon: "ti-message-circle" },
+    { key: "assistant",     file: "assistant.html",     label: "مساعد المبيعات",    icon: "ti-sparkles" },
   ],
 };
 
