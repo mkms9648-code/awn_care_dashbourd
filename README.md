@@ -91,6 +91,16 @@ select set_admin_secret('اكتب_سر_قوي_هنا');
 عند العميل. «المحادثات» بتعرض رسايل العميل مع فتحي (لو الـ schema بتاع جدول
 `messages` مختلف عندك، الدالة `admin_company_chat` بتتعامل مع النسختين تلقائيًا).
 
-## النشر (GitHub Pages)
-الريبو بينشر على **awnagent.com** (`CNAME`). اللوحة في **جذر الريبو** فبتفتح على
-`https://awnagent.com/login.html`. أي push على `main` بيتنشر خلال دقايق.
+## النشر (Vercel)
+اللوحة بتنشر على **https://app.awnagent.com** عن طريق **Vercel** الموصول بالريبو
+`awn_care_dashbourd`. إعداد Vercel: **Root Directory = `admin-dashboard`** — يعني
+ملفات تطبيق الويب لازم تكون جوّه `admin-dashboard/` في الريبو (وده مكانها فعلًا).
+مجلد `sql/` والـ README في جذر الريبو بره النشر (مش منشورين). أي push على `main`
+بيعمل Deploy تلقائي خلال دقيقة.
+
+> ملاحظة: `awnagent.com` نفسه (الـ apex) موقع تعريفي منفصل على Lovable — مالوش
+> علاقة باللوحة. اللوحة على الـ subdomain `app.awnagent.com` بس.
+
+> مزامنة مستقبلية: نسخة المصدر عندك في `awn-admin/`. لما تعدّل، انسخ
+> `index.html, login.html, config.js, assets/, awncare/, fathi/` لـ
+> `admin-dashboard/` في الريبو، و`sql/` + `README.md` لجذر الريبو، وبعدين push.
