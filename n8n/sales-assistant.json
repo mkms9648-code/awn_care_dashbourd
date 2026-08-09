@@ -1,5 +1,5 @@
 {
-  "name": "Sales Assistant (Awn Admin)",
+  "name": "Sales Assistant (Awn Admin) — text + vision",
   "nodes": [
     {
       "parameters": {
@@ -40,50 +40,53 @@
     },
     {
       "parameters": {
-        "promptType": "define",
-        "text": "={{ $('Webhook').item.json.body.message }}",
-        "options": {
-          "systemMessage": "={{ $json.persona }}\n\n=== معلومات المشروع (استخدمها كمصدر وحيد للحقائق) ===\n{{ $json.knowledge }}\n\nتعليمات: رد باللغة العربية بنبرة محترمة وتسويقية تحل المشاكل. لو معلومة مش موجودة فوق، قول إنك هتتأكد وترجع، وما تخترعش أسعار أو تفاصيل."
-        }
+        "jsCode": "const body = $('Webhook').first().json.body || {};\nconst kb = $('Get KB').first().json || {};\nconst system = (kb.persona || '') +\n  \"\\n\\n=== معلومات المشروع (استخدمها كمصدر وحيد للحقائق) ===\\n\" + (kb.knowledge || '') +\n  \"\\n\\nتعليمات: رد بالعربي بنبرة محترمة وتسويقية تحل المشاكل. لو فيه صورة مرفقة (مثلاً سكرين شوت محادثة عميل على واتساب) اقراها واستخدم محتواها في ردك. لو معلومة مش موجودة فوق، قول إنك هتتأكد وترجع، وما تخترعش أسعار أو تفاصيل.\";\n\nconst contents = [];\nfor (const h of (body.history || [])) {\n  contents.push({ role: h.role === 'assistant' ? 'model' : 'user', parts: [{ text: String(h.content || '') }] });\n}\nif (contents.length === 0) contents.push({ role: 'user', parts: [{ text: String(body.message || '') }] });\n\nif (body.image) {\n  const data = String(body.image).replace(/^data:[^;]+;base64,/, '');\n  contents[contents.length - 1].parts.push({ inline_data: { mime_type: body.image_mime || 'image/jpeg', data } });\n}\n\nreturn [{ json: { geminiBody: {\n  system_instruction: { parts: [{ text: system }] },\n  contents,\n  generationConfig: { temperature: 0.6 }\n} } }];"
       },
       "id": "b3a3a333-3333-4333-8333-333333333333",
-      "name": "Sales Agent",
-      "type": "@n8n/n8n-nodes-langchain.agent",
-      "typeVersion": 1.7,
-      "position": [460, 0]
+      "name": "Build Gemini Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [440, 0]
     },
     {
       "parameters": {
-        "modelName": "models/gemini-2.0-flash",
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=YOUR_GEMINI_API_KEY",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.geminiBody) }}",
         "options": {}
       },
       "id": "b4a4a444-4444-4444-8444-444444444444",
-      "name": "Google Gemini Chat Model",
-      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
-      "typeVersion": 1,
-      "position": [460, 200],
-      "credentials": {
-        "googlePalmApi": { "id": "REPLACE_WITH_YOUR_GEMINI_CREDENTIAL", "name": "Google Gemini" }
-      }
+      "name": "Gemini",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [660, 0]
     },
     {
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={{ JSON.stringify({ reply: $json.output }) }}",
+        "responseBody": "={{ JSON.stringify({ reply: ($json.candidates && $json.candidates[0] && $json.candidates[0].content && $json.candidates[0].content.parts && $json.candidates[0].content.parts[0] && $json.candidates[0].content.parts[0].text) ? $json.candidates[0].content.parts[0].text : 'معلش، مقدرتش أجيب رد دلوقتي — جرّب تاني.' }) }}",
         "options": {}
       },
       "id": "b5a5a555-5555-4555-8555-555555555555",
       "name": "Respond",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [820, 0]
+      "position": [880, 0]
     }
   ],
   "connections": {
     "Webhook": { "main": [[{ "node": "Get KB", "type": "main", "index": 0 }]] },
-    "Get KB": { "main": [[{ "node": "Sales Agent", "type": "main", "index": 0 }]] },
-    "Google Gemini Chat Model": { "ai_languageModel": [[{ "node": "Sales Agent", "type": "ai_languageModel", "index": 0 }]] },
-    "Sales Agent": { "main": [[{ "node": "Respond", "type": "main", "index": 0 }]] }
+    "Get KB": { "main": [[{ "node": "Build Gemini Request", "type": "main", "index": 0 }]] },
+    "Build Gemini Request": { "main": [[{ "node": "Gemini", "type": "main", "index": 0 }]] },
+    "Gemini": { "main": [[{ "node": "Respond", "type": "main", "index": 0 }]] }
   },
   "settings": { "executionOrder": "v1" },
   "pinData": {}
