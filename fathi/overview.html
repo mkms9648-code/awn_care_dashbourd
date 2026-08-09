@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>فتحي ميزانية — قريبًا</title>
+  <title>نظرة عامة — فتحي ميزانية</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
@@ -18,38 +18,66 @@
       <div class="page">
         <div class="page-head">
           <div>
-            <h1>فتحي ميزانية — لوحة التحكم</h1>
-            <p class="subtitle">المرحلة الجاية: نفس تحكم عون كير بالظبط، بس لعملاء فتحي.</p>
+            <h1>نظرة عامة — فتحي ميزانية</h1>
+            <p class="subtitle">كل العملاء، مين مفعّل، مين عنده كود دخول، ومين الشات مفتوح ليه.</p>
           </div>
+          <a href="clients.html" class="btn"><i class="ti ti-user-plus"></i> عميل جديد</a>
         </div>
-
-        <div class="card">
-          <div class="empty-state" style="padding:32px">
-            <i class="ti ti-tools" style="font-size:2.4em;display:block;margin-bottom:14px;color:var(--accent)"></i>
-            <h3 style="margin:0 0 8px;color:var(--ink-strong)">تحت الإنشاء</h3>
-            <p class="muted" style="max-width:520px;margin:0 auto 20px;line-height:1.9">
-              لوحة فتحي هتشتغل على مشروع Supabase منفصل، ومحتاجة أول حاجة نبني ليها طبقة أدمن
-              (app_admins + دوال admin_*) زي عون كير بالظبط. بعدها هتلاقي هنا:
-            </p>
-            <div style="max-width:560px;margin:0 auto;text-align:right">
-              <div class="ch-row" style="padding:11px 2px;border-bottom:1px solid var(--rule)"><i class="ti ti-message-circle" style="color:var(--accent)"></i>&nbsp; متابعة الشات بين كل عميل وفتحي (نفس شاشة عون كير)</div>
-              <div class="ch-row" style="padding:11px 2px;border-bottom:1px solid var(--rule)"><i class="ti ti-toggle-right-filled" style="color:var(--accent)"></i>&nbsp; تشغيل/إيقاف كل وحدة لكل عميل (شات، مخزون، مناديب، عمليات…)</div>
-              <div class="ch-row" style="padding:11px 2px;border-bottom:1px solid var(--rule)"><i class="ti ti-key" style="color:var(--accent)"></i>&nbsp; إدارة كود دخول كل شركة: إنشاء / تغيير / إلغاء</div>
-              <div class="ch-row" style="padding:11px 2px"><i class="ti ti-users" style="color:var(--accent)"></i>&nbsp; إنشاء عملاء جدد وتفعيلهم/إيقافهم</div>
-            </div>
-          </div>
-        </div>
+        <div class="stat-row" id="stat-row"></div>
+        <div class="card"><div class="table-wrap" id="table-wrap"><p class="muted">جاري التحميل…</p></div></div>
       </div>
     </main>
   </div>
 
   <script type="module">
-    import { requireAdmin, applyProductTheme } from "../assets/core.js";
+    import { requireAdmin, applyProductTheme, escapeHtml, fmtDate } from "../assets/core.js";
     import { renderShell } from "../assets/shell.js";
+    import { ensureSecret, rpc } from "../assets/fathi.js";
+
     applyProductTheme("fathi");
     const session = await requireAdmin();
     if (!session) throw new Error("not authorized");
     renderShell(session, { product: "fathi", active: "overview" });
+    await ensureSecret();
+
+    const tableWrap = document.getElementById("table-wrap");
+    const statRow = document.getElementById("stat-row");
+
+    const { data, error } = await rpc("admin_list_companies");
+    if (error) {
+      tableWrap.innerHTML = `<p class="error-msg">${escapeHtml(error.message)}</p>`;
+    } else {
+      const cs = data || [];
+      const active = cs.filter((c) => c.is_active).length;
+      const withCode = cs.filter((c) => c.has_code).length;
+      const withChat = cs.filter((c) => c.chat_enabled).length;
+      statRow.innerHTML = `
+        <div class="stat-tile"><div class="value">${cs.length}</div><div class="label">عميل</div></div>
+        <div class="stat-tile"><div class="value">${active}</div><div class="label">مفعّل</div></div>
+        <div class="stat-tile"><div class="value">${withCode}</div><div class="label">عنده كود دخول</div></div>
+        <div class="stat-tile"><div class="value">${withChat}</div><div class="label">الشات مفتوح</div></div>`;
+
+      if (cs.length === 0) {
+        tableWrap.innerHTML = `<div class="empty-state">مفيش عملاء لسه. اضغط «عميل جديد».</div>`;
+      } else {
+        tableWrap.innerHTML = `
+          <table>
+            <thead><tr><th>العميل</th><th>العملة</th><th>الحالة</th><th>الشات</th><th>كود الدخول</th><th>أُضيف</th><th></th></tr></thead>
+            <tbody>
+              ${cs.map((c) => `
+                <tr>
+                  <td><strong>${escapeHtml(c.name)}</strong>${c.industry ? `<div class="muted">${escapeHtml(c.industry)}</div>` : ""}</td>
+                  <td>${escapeHtml(c.currency || "—")}</td>
+                  <td><span class="pill ${c.is_active ? "pill-good" : "pill-critical"}">${c.is_active ? "مفعّل" : "موقوف"}</span></td>
+                  <td><span class="pill ${c.chat_enabled ? "pill-good" : "pill-muted"}">${c.chat_enabled ? "مفتوح" : "مقفول"}</span></td>
+                  <td>${c.has_code ? '<span class="pill pill-accent">موجود</span>' : '<span class="pill pill-muted">مفيش</span>'}</td>
+                  <td class="muted">${fmtDate(c.created_at)}</td>
+                  <td><a class="icon-btn" title="تحكم" href="subscriptions.html#c-${escapeHtml(c.id)}"><i class="ti ti-settings"></i></a></td>
+                </tr>`).join("")}
+            </tbody>
+          </table>`;
+      }
+    }
   </script>
 </body>
 </html>

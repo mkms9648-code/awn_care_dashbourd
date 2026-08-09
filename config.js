@@ -31,8 +31,9 @@ window.APP_CONFIG = {
       SUPABASE_URL: "https://jiniprotcrmsverqetmw.supabase.co",
       SUPABASE_ANON_KEY: "sb_publishable__50LG05sqjbG4ofbGaCC1g_O05FxmzL",
       N8N_BASE_URL: "https://n8n-c1bz.srv1841520.hstgr.cloud",
-      // فتحي لسه ماعندهوش طبقة أدمن (المرحلة الجاية) — الصفحات بتعرض "قريبًا"
-      enabled: false,
+      // فتحي متفعّل — محتاج تشغّل fathi_admin_dashboard.sql على مشروع فتحي +
+      // تعيّن سر الأدمن: select set_admin_secret('...')
+      enabled: true,
     },
   },
 };

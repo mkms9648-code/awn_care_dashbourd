@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>الاشتراكات والتحكم — فتحي ميزانية</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css" />
+  <link rel="stylesheet" href="../assets/style.css" />
+  <script src="../config.js"></script>
+  <style>
+    .ws-card { border: 1px solid var(--rule); border-radius: var(--radius-lg); background: var(--white); margin-bottom: 12px; box-shadow: var(--shadow); overflow: hidden; }
+    .ws-head { display: flex; align-items: center; gap: 14px; padding: 15px 18px; cursor: pointer; }
+    .ws-head:hover { background: var(--paper); }
+    .ws-head .chev { transition: transform .18s; color: var(--grey-2); margin-inline-start: auto; }
+    .ws-card.open .ws-head .chev { transform: rotate(180deg); }
+    .ws-title { font-weight: 700; color: var(--ink-strong); }
+    .ws-body { display: none; padding: 8px 18px 14px; border-top: 1px solid var(--rule); }
+    .ws-card.open .ws-body { display: block; }
+    .feat-row { display: flex; align-items: center; gap: 12px; padding: 12px 2px; border-bottom: 1px solid var(--rule); }
+    .feat-row:last-child { border-bottom: none; }
+    .feat-name { font-weight: 600; color: var(--ink-strong); flex: 1; }
+    .feat-row.head-row { background: var(--paper); margin: 0 -18px; padding: 12px 18px; border-radius: 0; }
+  </style>
+</head>
+<body>
+  <div class="app-shell">
+    <aside id="app-nav"></aside>
+    <main class="main">
+      <div class="page">
+        <div class="page-head">
+          <div>
+            <h1>الاشتراكات والتحكم</h1>
+            <p class="subtitle">لكل عميل: فعّله أو أوقفه، افتح/اقفل الشات، وتحكم في الوحدات اللي تظهرله.</p>
+          </div>
+        </div>
+        <div class="toolbar">
+          <div class="search-box" style="max-width:360px;flex:1">
+            <i class="ti ti-search"></i><input type="search" id="search" placeholder="ابحث باسم العميل…" />
+          </div>
+        </div>
+        <div id="list"><p class="muted">جاري التحميل…</p></div>
+      </div>
+    </main>
+  </div>
+
+  <script type="module">
+    import { requireAdmin, applyProductTheme, escapeHtml } from "../assets/core.js";
+    import { renderShell } from "../assets/shell.js";
+    import { ensureSecret, rpc } from "../assets/fathi.js";
+    import { toast } from "../assets/ui.js";
+
+    applyProductTheme("fathi");
+    const session = await requireAdmin();
+    if (!session) throw new Error("not authorized");
+    renderShell(session, { product: "fathi", active: "subscriptions" });
+    await ensureSecret();
+
+    const listEl = document.getElementById("list");
+    const searchEl = document.getElementById("search");
+    let companies = [];
+    let catalog = [];
+
+    async function boot() {
+      const [cRes, catRes] = await Promise.all([rpc("admin_list_companies"), rpc("admin_feature_catalog")]);
+      if (cRes.error) { listEl.innerHTML = `<p class="error-msg">${escapeHtml(cRes.error.message)}</p>`; return; }
+      companies = cRes.data || [];
+      catalog = (catRes.data || []).filter((f) => f.key !== "chat"); // الشات ليه عموده الخاص
+      render();
+      const hash = location.hash.match(/^#c-(.+)$/);
+      if (hash) { const card = document.querySelector(`.ws-card[data-id="${CSS.escape(hash[1])}"]`); if (card) { card.scrollIntoView({ behavior: "smooth", block: "center" }); card.classList.add("open"); } }
+    }
+
+    function currentFiltered() {
+      const q = searchEl.value.trim().toLowerCase();
+      return q ? companies.filter((c) => (c.name || "").toLowerCase().includes(q)) : companies;
+    }
+
+    function render() {
+      const items = currentFiltered();
+      if (items.length === 0) { listEl.innerHTML = `<div class="empty-state">مفيش نتايج.</div>`; return; }
+      listEl.innerHTML = "";
+      items.forEach((c) => listEl.appendChild(card(c)));
+    }
+
+    function card(c) {
+      const el = document.createElement("div");
+      el.className = "ws-card";
+      el.dataset.id = c.id;
+      el.innerHTML = `
+        <div class="ws-head">
+          <div><div class="ws-title">${escapeHtml(c.name)}</div><div class="muted">${escapeHtml(c.currency || "")}</div></div>
+          <span class="pill ${c.is_active ? "pill-good" : "pill-critical"}">${c.is_active ? "مفعّل" : "موقوف"}</span>
+          <span class="pill ${c.chat_enabled ? "pill-good" : "pill-muted"}">شات ${c.chat_enabled ? "مفتوح" : "مقفول"}</span>
+          <i class="ti ti-chevron-down chev"></i>
+        </div>
+        <div class="ws-body"></div>`;
+      el.querySelector(".ws-head").addEventListener("click", () => el.classList.toggle("open"));
+
+      const body = el.querySelector(".ws-body");
+      body.appendChild(toggleRow("العميل مفعّل", c.is_active, async (val) => {
+        const { error } = await rpc("admin_set_company_active", { p_company_id: c.id, p_active: val });
+        if (error) { toast(error.message, "error"); return false; }
+        c.is_active = val; updatePill(el, 0, val ? "مفعّل" : "موقوف", val ? "pill-good" : "pill-critical");
+        toast("اتحفظ", "good", 1200); return true;
+      }, true));
+
+      body.appendChild(toggleRow("الشات مفتوح", c.chat_enabled, async (val) => {
+        const { error } = await rpc("admin_set_chat_enabled", { p_company_id: c.id, p_enabled: val });
+        if (error) { toast(error.message, "error"); return false; }
+        c.chat_enabled = val; updatePill(el, 1, `شات ${val ? "مفتوح" : "مقفول"}`, val ? "pill-good" : "pill-muted");
+        toast("اتحفظ", "good", 1200); return true;
+      }));
+
+      const head = document.createElement("div");
+      head.className = "feat-row head-row";
+      head.innerHTML = `<div class="feat-name">الوحدات اللي تظهر للعميل</div>`;
+      body.appendChild(head);
+
+      catalog.forEach((f) => {
+        const enabled = c.feature_flags?.[f.key] !== false; // غائب = مفعّل
+        body.appendChild(toggleRow(f.label, enabled, async (val) => {
+          const { error } = await rpc("admin_set_company_feature", { p_company_id: c.id, p_key: f.key, p_state: val ? "inherit" : "off" });
+          if (error) { toast(error.message, "error"); return false; }
+          c.feature_flags = c.feature_flags || {};
+          if (val) delete c.feature_flags[f.key]; else c.feature_flags[f.key] = false;
+          toast("اتحفظ", "good", 1200); return true;
+        }));
+      });
+      return el;
+    }
+
+    function updatePill(card, idx, text, cls) {
+      const pills = card.querySelectorAll(".ws-head .pill");
+      if (pills[idx]) { pills[idx].textContent = text; pills[idx].className = "pill " + cls; }
+    }
+
+    function toggleRow(label, checked, onChange) {
+      const row = document.createElement("div");
+      row.className = "feat-row";
+      row.innerHTML = `<div class="feat-name">${escapeHtml(label)}</div>
+        <label class="switch"><input type="checkbox" ${checked ? "checked" : ""}><span class="track"></span></label>`;
+      const input = row.querySelector("input");
+      input.addEventListener("change", async () => {
+        input.disabled = true;
+        const ok = await onChange(input.checked);
+        input.disabled = false;
+        if (ok === false) input.checked = !input.checked;
+      });
+      return row;
+    }
+
+    searchEl.addEventListener("input", render);
+    boot();
+  </script>
+</body>
+</html>

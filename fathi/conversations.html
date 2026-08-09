@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>المحادثات — فتحي ميزانية</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css" />
+  <link rel="stylesheet" href="../assets/style.css" />
+  <script src="../config.js"></script>
+</head>
+<body>
+  <div class="app-shell">
+    <aside id="app-nav"></aside>
+    <main class="main">
+      <div class="chatapp">
+        <div class="chatapp-list">
+          <div class="chatapp-list-header">
+            <h2>المحادثات</h2>
+            <div class="search-box"><i class="ti ti-search"></i><input type="text" id="search-input" placeholder="ابحث باسم العميل…" /></div>
+          </div>
+          <div class="chatapp-list-items" id="chat-list"><p class="muted" style="padding:16px;">جاري التحميل…</p></div>
+        </div>
+        <div class="chatapp-thread">
+          <div class="chatapp-thread-header">
+            <button type="button" id="back-to-list-btn" class="icon-btn thread-back-btn" title="رجوع"><i class="ti ti-arrow-right"></i></button>
+            <div id="thread-header-info"><span class="muted">اختار عميل عشان تشوف محادثته مع فتحي</span></div>
+          </div>
+          <div class="chatapp-thread-body" id="thread-body">
+            <div class="empty-state"><i class="ti ti-message-2" style="font-size:2em;display:block;margin-bottom:10px;"></i>اختار عميل من القايمة</div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script type="module">
+    import { requireAdmin, applyProductTheme, escapeHtml, fmtDate, initials } from "../assets/core.js";
+    import { renderShell } from "../assets/shell.js";
+    import { ensureSecret, rpc } from "../assets/fathi.js";
+
+    applyProductTheme("fathi");
+    const session = await requireAdmin();
+    if (!session) throw new Error("not authorized");
+    renderShell(session, { product: "fathi", active: "conversations" });
+    await ensureSecret();
+
+    const chatappEl = document.querySelector(".chatapp");
+    const listEl = document.getElementById("chat-list");
+    const searchInput = document.getElementById("search-input");
+    const threadHeaderInfo = document.getElementById("thread-header-info");
+    const threadBody = document.getElementById("thread-body");
+    document.getElementById("back-to-list-btn").addEventListener("click", () => chatappEl.classList.remove("thread-open"));
+
+    let companies = [];
+    let active = null;
+
+    function currentFiltered() {
+      const q = searchInput.value.trim().toLowerCase();
+      return q ? companies.filter((c) => (c.name || "").toLowerCase().includes(q)) : companies;
+    }
+
+    function renderList(items) {
+      if (items.length === 0) { listEl.innerHTML = `<div class="empty-state">مفيش عملاء.</div>`; return; }
+      listEl.innerHTML = items.map((c) => {
+        const idx = companies.indexOf(c);
+        return `
+          <div class="chat-row ${active === c ? "active" : ""}" data-index="${idx}">
+            <div class="chat-avatar">${initials(c.name)}</div>
+            <div class="chat-row-info">
+              <div class="chat-row-name">${escapeHtml(c.name)}</div>
+              <div class="chat-row-meta"><i class="ti ti-calculator"></i>${escapeHtml(c.currency || "")} · ${c.chat_enabled ? "الشات مفتوح" : "الشات مقفول"}</div>
+            </div>
+          </div>`;
+      }).join("");
+      listEl.querySelectorAll(".chat-row").forEach((row) => row.addEventListener("click", () => open(companies[Number(row.dataset.index)])));
+    }
+
+    async function loadCompanies() {
+      const { data, error } = await rpc("admin_list_companies");
+      if (error) { listEl.innerHTML = `<p class="error-msg" style="padding:16px;">${escapeHtml(error.message)}</p>`; return; }
+      companies = data || [];
+      renderList(currentFiltered());
+    }
+
+    async function open(c) {
+      active = c;
+      renderList(currentFiltered());
+      chatappEl.classList.add("thread-open");
+      threadHeaderInfo.innerHTML = `
+        <div class="chat-avatar">${initials(c.name)}</div>
+        <div><div class="title">${escapeHtml(c.name)}</div><div class="subtitle">${escapeHtml(c.currency || "")}</div></div>`;
+      threadBody.innerHTML = `<p class="muted">جاري التحميل…</p>`;
+      const { data, error } = await rpc("admin_company_chat", { p_company_id: c.id, p_limit: 300 });
+      if (error) { threadBody.innerHTML = `<p class="error-msg">${escapeHtml(error.message)}</p>`; return; }
+      renderThread((data || []).slice().reverse());
+    }
+
+    function renderThread(messages) {
+      if (messages.length === 0) { threadBody.innerHTML = `<div class="empty-state">مفيش رسايل مسجّلة للعميل ده.</div>`; return; }
+      let prevRole = null;
+      threadBody.innerHTML = messages.map((m) => {
+        const isAi = m.role === "ai";
+        const grouped = prevRole === m.role; prevRole = m.role;
+        const isAudio = m.message_type === "audio";
+        const text = isAudio && !m.content ? "🎙️ رسالة صوتية" : (m.content || "");
+        const exec = isAi && m.exec_url
+          ? `<a class="icon-btn round" href="${escapeHtml(m.exec_url)}" target="_blank" rel="noopener" title="افتح التنفيذ"><i class="ti ti-git-branch"></i></a>` : "";
+        return `
+          <div class="bubble ${isAi ? "bubble-ai" : "bubble-human"} ${grouped ? "grouped" : ""}">
+            <div class="bubble-text" dir="auto">${escapeHtml(text)}</div>
+            <div class="bubble-time"><span>${m.at ? fmtDate(m.at) : ""}</span>${exec}</div>
+          </div>`;
+      }).join("");
+      threadBody.scrollTop = threadBody.scrollHeight;
+    }
+
+    searchInput.addEventListener("input", () => renderList(currentFiltered()));
+    loadCompanies();
+  </script>
+</body>
+</html>

@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>العملاء والدخول — فتحي ميزانية</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css" />
+  <link rel="stylesheet" href="../assets/style.css" />
+  <script src="../config.js"></script>
+</head>
+<body>
+  <div class="app-shell">
+    <aside id="app-nav"></aside>
+    <main class="main">
+      <div class="page">
+        <div class="page-head">
+          <div>
+            <h1>العملاء والدخول</h1>
+            <p class="subtitle">أنشئ عميل، حدّد/غيّر كود دخوله للداشبورد والتطبيق، فعّله أو أوقفه.</p>
+          </div>
+          <button class="btn" id="add-btn"><i class="ti ti-user-plus"></i> عميل جديد</button>
+        </div>
+        <div class="toolbar">
+          <div class="search-box" style="max-width:320px;flex:1">
+            <i class="ti ti-search"></i><input type="search" id="search" placeholder="ابحث باسم العميل…" />
+          </div>
+        </div>
+        <div class="card"><div class="table-wrap" id="table-wrap"><p class="muted">جاري التحميل…</p></div></div>
+      </div>
+    </main>
+  </div>
+
+  <script type="module">
+    import { requireAdmin, applyProductTheme, escapeHtml, fmtDate } from "../assets/core.js";
+    import { renderShell } from "../assets/shell.js";
+    import { ensureSecret, rpc } from "../assets/fathi.js";
+    import { openModal, confirmDialog, toast, buildMenu, copyToClipboard, busy } from "../assets/ui.js";
+
+    applyProductTheme("fathi");
+    const session = await requireAdmin();
+    if (!session) throw new Error("not authorized");
+    renderShell(session, { product: "fathi", active: "clients" });
+    await ensureSecret();
+
+    const CURRENCIES = ["EGP", "SAR", "AED", "USD", "EUR", "JOD"];
+    const tableWrap = document.getElementById("table-wrap");
+    const searchEl = document.getElementById("search");
+    let companies = [];
+
+    const randomCode = () => Math.random().toString(36).slice(2, 8).toUpperCase();
+
+    async function load() {
+      tableWrap.innerHTML = `<p class="muted">جاري التحميل…</p>`;
+      const { data, error } = await rpc("admin_list_companies");
+      if (error) { tableWrap.innerHTML = `<p class="error-msg">${escapeHtml(error.message)}</p>`; return; }
+      companies = data || [];
+      render();
+    }
+
+    function currentFiltered() {
+      const q = searchEl.value.trim().toLowerCase();
+      return q ? companies.filter((c) => (c.name || "").toLowerCase().includes(q)) : companies;
+    }
+
+    function render() {
+      const items = currentFiltered();
+      if (items.length === 0) { tableWrap.innerHTML = `<div class="empty-state">مفيش عملاء.</div>`; return; }
+      const table = document.createElement("table");
+      table.innerHTML = `<thead><tr><th>العميل</th><th>العملة</th><th>الحالة</th><th>الشات</th><th>كود الدخول</th><th>أُضيف</th><th></th></tr></thead><tbody></tbody>`;
+      const tbody = table.querySelector("tbody");
+      items.forEach((c) => tbody.appendChild(row(c)));
+      tableWrap.innerHTML = ""; tableWrap.appendChild(table);
+    }
+
+    function row(c) {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td><strong>${escapeHtml(c.name)}</strong>${c.industry ? `<div class="muted">${escapeHtml(c.industry)}</div>` : ""}</td>
+        <td>${escapeHtml(c.currency || "—")}</td>
+        <td><span class="pill ${c.is_active ? "pill-good" : "pill-critical"}">${c.is_active ? "مفعّل" : "موقوف"}</span></td>
+        <td><span class="pill ${c.chat_enabled ? "pill-good" : "pill-muted"}">${c.chat_enabled ? "مفتوح" : "مقفول"}</span></td>
+        <td>${c.has_code ? '<span class="pill pill-accent">موجود</span>' : '<span class="pill pill-muted">مفيش</span>'}</td>
+        <td class="muted">${fmtDate(c.created_at)}</td>
+        <td class="actions-cell"></td>`;
+      const menu = buildMenu([
+        { label: c.has_code ? "تغيير كود الدخول" : "تعيين كود دخول", icon: "ti-key", onClick: () => setCode(c) },
+        ...(c.has_code ? [{ label: "إلغاء كود الدخول", icon: "ti-key-off", danger: true, onClick: () => clearCode(c) }] : []),
+        { sep: true },
+        c.chat_enabled
+          ? { label: "اقفل الشات", icon: "ti-message-off", onClick: () => setChat(c, false) }
+          : { label: "افتح الشات", icon: "ti-message", onClick: () => setChat(c, true) },
+        c.is_active
+          ? { label: "إيقاف العميل", icon: "ti-player-pause", danger: true, onClick: () => setActive(c, false) }
+          : { label: "تفعيل العميل", icon: "ti-player-play", onClick: () => setActive(c, true) },
+      ]);
+      tr.querySelector(".actions-cell").appendChild(menu);
+      return tr;
+    }
+
+    function setCode(c) {
+      const body = document.createElement("div");
+      body.innerHTML = `
+        <div class="field"><label class="lbl">كود الدخول الجديد</label>
+          <div style="display:flex;gap:8px"><input type="text" id="code" class="mono" placeholder="مثلاً 4F9K2A" />
+          <button class="btn btn-neutral btn-sm" id="gen" type="button"><i class="ti ti-dice"></i> توليد</button></div>
+        </div>
+        <div class="hint">العميل بيدخل بالكود ده على الداشبورد والتطبيق. غيّره في أي وقت.</div>`;
+      body.querySelector("#gen").addEventListener("click", () => body.querySelector("#code").value = randomCode());
+      const m = openModal({
+        title: c.has_code ? "تغيير كود الدخول" : "تعيين كود دخول", subtitle: c.name, icon: "ti-key",
+        body, actionsLeadSpacer: true,
+        actions: [
+          { label: "إلغاء", variant: "btn-neutral", onClick: (close) => close() },
+          { label: "حفظ", icon: "ti-check", onClick: async (close) => {
+              const code = body.querySelector("#code").value.trim();
+              if (!code) { toast("اكتب أو ولّد كود", "error"); return; }
+              const btn = m.root.querySelector('[data-act="1"]'); const restore = busy(btn, "بيحفظ…");
+              const { error } = await rpc("admin_set_company_code", { p_company_id: c.id, p_code: code });
+              if (error) { restore(); toast(error.message, "error"); return; }
+              close(); toast("اتحفظ الكود", "good"); reveal(c, code); load();
+            } },
+        ],
+      });
+    }
+
+    function reveal(c, code) {
+      openModal({
+        title: "كود دخول العميل", subtitle: c.name, icon: "ti-key",
+        body: `<p class="muted" style="margin:0 0 10px">ده الكود اللي العميل بيدخل بيه. انسخه وابعتهوله.</p>
+               <div class="code-reveal"><span class="code-value">${escapeHtml(code)}</span></div>`,
+        actionsLeadSpacer: true,
+        actions: [
+          { label: "نسخ", variant: "btn-outline", icon: "ti-copy", onClick: () => copyToClipboard(code) },
+          { label: "تمام", onClick: (close) => close() },
+        ],
+      });
+    }
+
+    async function clearCode(c) {
+      const ok = await confirmDialog({ title: "إلغاء كود الدخول؟", icon: "ti-key-off", danger: true, confirmLabel: "إلغاء الكود",
+        message: `«${c.name}» مش هيقدر يدخل الداشبورد/التطبيق بعد كده لحد ما تعمله كود جديد.` });
+      if (!ok) return;
+      const { error } = await rpc("admin_clear_company_code", { p_company_id: c.id });
+      if (error) { toast(error.message, "error"); return; }
+      toast("اتلغى الكود", "good"); load();
+    }
+
+    async function setActive(c, active) {
+      if (!active) {
+        const ok = await confirmDialog({ title: "إيقاف العميل؟", icon: "ti-player-pause", danger: true, confirmLabel: "إيقاف",
+          message: `هتوقف «${c.name}». تقدر تفعّله تاني في أي وقت.` });
+        if (!ok) return;
+      }
+      const { error } = await rpc("admin_set_company_active", { p_company_id: c.id, p_active: active });
+      if (error) { toast(error.message, "error"); return; }
+      toast(active ? "اتفعّل" : "اتوقف", "good"); load();
+    }
+
+    async function setChat(c, enabled) {
+      const { error } = await rpc("admin_set_chat_enabled", { p_company_id: c.id, p_enabled: enabled });
+      if (error) { toast(error.message, "error"); return; }
+      toast(enabled ? "اتفتح الشات" : "اتقفل الشات", "good"); load();
+    }
+
+    document.getElementById("add-btn").addEventListener("click", () => {
+      const body = document.createElement("div");
+      body.innerHTML = `
+        <div class="field"><label class="lbl">اسم العميل / الشركة</label><input type="text" id="f-name" /></div>
+        <div class="field"><label class="lbl">العملة</label><select id="f-cur">${CURRENCIES.map((x) => `<option value="${x}">${x}</option>`).join("")}</select></div>
+        <div class="field"><label class="lbl">كود الدخول (اختياري)</label>
+          <div style="display:flex;gap:8px"><input type="text" id="f-code" class="mono" placeholder="سيبه فاضي وتعمله بعدين" />
+          <button class="btn btn-neutral btn-sm" id="gen" type="button"><i class="ti ti-dice"></i> توليد</button></div>
+        </div>`;
+      body.querySelector("#gen").addEventListener("click", () => body.querySelector("#f-code").value = randomCode());
+      const m = openModal({
+        title: "عميل جديد", icon: "ti-user-plus", body, actionsLeadSpacer: true,
+        actions: [
+          { label: "إلغاء", variant: "btn-neutral", onClick: (close) => close() },
+          { label: "إنشاء", icon: "ti-check", onClick: async (close) => {
+              const name = body.querySelector("#f-name").value.trim();
+              if (!name) { toast("اكتب اسم العميل", "error"); return; }
+              const code = body.querySelector("#f-code").value.trim() || null;
+              const btn = m.root.querySelector('[data-act="1"]'); const restore = busy(btn, "بيحفظ…");
+              const { error } = await rpc("admin_create_company", {
+                p_name: name, p_currency: body.querySelector("#f-cur").value, p_code: code,
+              });
+              if (error) { restore(); toast(error.message, "error"); return; }
+              close(); toast("اتعمل العميل", "good");
+              if (code) reveal({ name }, code);
+              load();
+            } },
+        ],
+      });
+    });
+
+    searchEl.addEventListener("input", render);
+    load();
+  </script>
+</body>
+</html>

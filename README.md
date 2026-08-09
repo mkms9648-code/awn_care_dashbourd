@@ -2,127 +2,95 @@
 
 لوحة تحكم واحدة لكل منتجات عون إيجنت. موقع HTML/CSS/JS ثابت بالكامل (بدون أي
 build step أو Node على السيرفر) — بيتكلم مباشرة مع Supabase عن طريق
-`@supabase/supabase-js` من CDN. ترفعه لأي استضافة ستاتيك وتربطه بدومينك.
+`@supabase/supabase-js` من CDN. بينشر على **awnagent.com** عن طريق GitHub Pages.
 
 المنتجات:
 
-- **عون كير** (Doctor Assistant) — مشروع Supabase `kaqoozpuvdvernvlmqbk`. **جاهز**.
-- **فتحي ميزانية** (Fathi) — مشروع Supabase منفصل `jiniprotcrmsverqetmw`. **المرحلة الجاية**
-  (متعطّل في `config.js` عن طريق `enabled: false` لحد ما نبني طبقة الأدمن بتاعته).
+- **عون كير** (Doctor Assistant) — مشروع Supabase `kaqoozpuvdvernvlmqbk`.
+- **فتحي ميزانية** (Fathi) — مشروع Supabase منفصل `jiniprotcrmsverqetmw`.
 
-> الدخول للوحة بيتم على مشروع **عون كير** (اللي فيه `app_admins`). كل منتج بيتقرا/
-> يتحكم من مشروعه هو — اللوحة بتنشئ عميل Supabase منفصل لكل منتج تلقائيًا.
+> الدخول للّوحة بيتم بحساب Supabase Auth على مشروع **عون كير** (اللي فيه `app_admins`).
+> **فتحي** مشروع منفصل معندهوش Auth للأدمن، فبيتأمّن بـ "سر أدمن" (bcrypt) بيتبعت
+> مع كل نداء — نفس فلسفة كود دخول العميل الموجودة في فتحي. اللوحة بتنشئ عميل
+> Supabase منفصل لكل منتج تلقائيًا.
 
 ## المحتوى
 
 ```
 awn-admin/
-  config.js                 ← الملف الوحيد اللي بتعدّله بعد الرفع (مفاتيح المنتجين)
+  config.js                 ← الملف الوحيد اللي بتعدّله (مفاتيح المنتجين)
   login.html                ← تسجيل الدخول (Supabase Auth على مشروع عون كير)
   index.html                ← موزّع: بيحوّل لصفحة النظرة العامة للمنتج
   assets/
     core.js                 ← عملاء Supabase للمنتجين + حراسة الدخول + أدوات
     ui.js                   ← نوافذ/تنبيهات/تأكيد/قوائم إجراءات (مكتبة الواجهة)
+    fathi.js                ← عميل فتحي + بوابة سر الأدمن + غلاف نداء الدوال
     shell.js                ← السايدبار: مبدّل المنتجات + تنقّل المنتج
     style.css               ← الأنماط + مكتبة المكوّنات
   awncare/                  ← صفحات عون كير
     overview.html           ← نظرة عامة على الاشتراكات
-    subscriptions.html      ← التحكم: باقة كل عميل + تشغيل/إيقاف كل وحدة (توجلات)
+    subscriptions.html      ← التحكم: باقة كل عميل + تشغيل/إيقاف كل وحدة
     doctors.html            ← الأطباء: إنشاء + كود دخول + تفعيل/إيقاف + قنوات
     conversations.html      ← متابعة محادثة أي دكتور مع الـ AI + لينك تنفيذ n8n
-  fathi/
-    overview.html           ← Placeholder (قريبًا)
+  fathi/                    ← صفحات فتحي
+    overview.html           ← نظرة عامة على العملاء
+    subscriptions.html      ← التحكم: تفعيل/إيقاف + الشات + وحدات كل عميل
+    clients.html            ← العملاء: إنشاء + كود دخول (تعيين/تغيير/إلغاء) + تفعيل
+    conversations.html      ← متابعة محادثة كل عميل مع فتحي
+  sql/                      ← الميجريشنز (تتنفّذ يدويًا في Supabase)
 ```
 
-## خطوات التشغيل
+## التشغيل — عون كير
 
-### 1) شغّل المايجريشن الجديد في Supabase (عون كير)
-
-من Supabase Dashboard (مشروع عون كير) → SQL Editor، نفّذ **بالترتيب** لو لسه:
-
-- `sql/020_admin_dashboard.sql` (لو مش متنفّذ) — بيضيف
-  `app_admins`, `app_is_admin()`, ودوال العرض `admin_workspaces_overview` /
-  `admin_case_counts` / `admin_conversations_feed`.
+### 1) شغّل الـ SQL في Supabase (مشروع عون كير)
+من SQL Editor، نفّذ **بالترتيب** لو لسه:
+- `sql/020_admin_dashboard.sql` — `app_admins` + `app_is_admin()` + دوال العرض.
 - `sql/021_admin_doctor_channels.sql` — دالة قايمة الشاتس.
-- **`sql/025_admin_control.sql`** (الجديد) — بيضيف طبقة
-  **التحكم** (كتابة): `admin_feature_catalog`, `admin_workspace_detail`,
-  `admin_set_workspace_feature`, `admin_set_workspace_plan`, `admin_list_doctors`,
-  `admin_create_doctor`, `admin_issue_doctor_login`, `admin_set_doctor_status`,
-  `admin_set_channel_active`, `admin_offboard_doctor`. كلها SECURITY DEFINER +
-  بتتحقق `app_is_admin()` الأول، ومتاحة لـ authenticated بس.
+- **`sql/025_admin_control.sql`** — طبقة التحكم (الباقات، التوجلات، الأطباء، الأكواد).
 
-### 2) عدّل `config.js`
-
-كل المفاتيح متحطوطة أصلًا. لو اتغيّر أي حاجة، عدّل داخل `PRODUCTS.awncare`:
-`SUPABASE_URL`, `SUPABASE_ANON_KEY`, و`N8N_BASE_URL` (بدون `/` في الآخر — عشان
-لينك التنفيذ في المحادثات يشتغل).
-
-> مفتاح الـ anon عمومًا public وده طبيعي — كل الحماية جوّه الدوال نفسها عن طريق
-> `app_is_admin()`، مش بإخفاء المفتاح.
-
-### 3) ضيف نفسك كمدير
-
-مفيش صفحة تسجيل حساب جديد (نفس فلسفة النظام — بيتضاف يدويًا لمرة واحدة):
-
-1. Supabase (عون كير) → Authentication → Users → **Add user** — إيميلك وكلمة سر.
-2. SQL Editor:
-   ```sql
-   insert into app_admins (id, email, role)
-   select id, email, 'owner' from auth.users where email = 'you@example.com';
-   ```
-   (لأي زميل بعدين استخدم `'admin'` بدل `'owner'`.)
-
-### 4) جرّبه محليًا (اختياري)
-
-الصفحات بتستخدم ES modules، فمتصفح زي Chrome بيرفض `file://`. شغّل سيرفر ستاتيك:
-
-```bash
-npx serve .
-# أو: python -m http.server 8080
+### 2) ضيف نفسك كمدير
+Authentication → Users → Add user (إيميلك وكلمة سر)، وبعدين:
+```sql
+insert into app_admins (id, email, role)
+select id, email, 'owner' from auth.users where email = 'you@example.com';
 ```
 
-وافتح `http://localhost:PORT/login.html`.
+## التشغيل — فتحي
 
-### 5) ارفعه واربطه بالدومين
+### 1) شغّل الـ SQL في Supabase (مشروع فتحي)
+من SQL Editor نفّذ **`sql/fathi_admin_dashboard.sql`** — بيضيف أعمدة التحكم
+(`is_active`, `feature_flags`)، سر الأدمن، ودوال `admin_*` (قائمة العملاء،
+إنشاء، أكواد الدخول، توجل الشات/الوحدات، متابعة الشات).
 
-ارفع محتوى فولدر `awn-admin/` كله لأي استضافة ستاتيك (Netlify / Cloudflare Pages /
-FTP) وحوّل الدومين. مفيش أي سيرفر مطلوب.
+### 2) عيّن سر الأدمن (لمرة واحدة، service_role من SQL Editor)
+```sql
+select set_admin_secret('اكتب_سر_قوي_هنا');
+```
+ده السر اللي اللوحة هتطلبه أول ما تفتح تبويب فتحي.
 
-## التحقق (Verification) — بعد الرفع أو محليًا
+### 3) (اختياري) فعّل إخفاء الوحدات في تطبيق العميل
+توجل الشات (`chat_enabled`) بيشتغل فورًا على النسخة المنشورة من داشبورد العميل.
+عشان توجلات **باقي الوحدات** (مخزون/مناديب/عمليات…) تخفي التابات فعليًا عند
+العميل، لازم تعيد نشر ملف `Fathi/dashboard.html` (اتعدّل فيه `buildTabs` +
+`loadFlags` عشان يقرا `feature_flags`). لو ماعملتش كده، التوجلات بتتحفظ لكن
+التابات هتفضل ظاهرة لحد ما ترفع النسخة الجديدة.
 
-1. **الدخول:** افتح `login.html` وادخل بحساب الأدمن → المفروض يحوّلك على النظرة العامة.
-2. **النظرة العامة:** `awncare/overview.html` بيعرض إحصائيات + جدول مساحات العمل.
-3. **التحكم في الاشتراكات:** `awncare/subscriptions.html` — افتح أي عميل:
-   - غيّر الباقة من القايمة → المفروض توست "اتغيّرت الباقة" وتتحدّث حالة الوحدات.
-   - على أي وحدة اضغط **إيقاف** → المفروض حالة "موقوف". **تأكيد فعلي:** الدكتور
-     في هذه المساحة لازم يتمنع من استخدام البوت ده (لأن `app_has_feature` بيقرا
-     `feature_overrides` اللي التوجل بيكتب فيه). **تشغيل** بيفرضها حتى لو مش في الباقة،
-     و**وراثة** بيرجّعها لسلوك الباقة.
-4. **الأطباء والدخول:** `awncare/doctors.html`:
-   - **دكتور جديد** → املأ الفورم → بعد الحفظ لازم تظهر نافذة فيها **كود الدخول**.
-   - **كود دخول جديد** على دكتور موجود → لازم كود مختلف (القديم يبطل).
-   - **إيقاف/تفعيل** → البادج بيتغيّر.
-   - **قنوات الدكتور** → توجل أي قناة → يتحفظ.
-5. **المحادثات:** `awncare/conversations.html` — اختار دكتور من القايمة → تظهر الرسايل،
-   وكل رد AI فيه زرار يفتح التنفيذ في n8n (لو فيه سجل تنفيذ).
+## `config.js`
+كل المفاتيح متحطوطة. لتعطيل تبويب فتحي مؤقتًا: `PRODUCTS.fathi.enabled = false`.
+مفاتيح الـ anon عمومًا public وده طبيعي — الحماية جوّه الدوال (`app_is_admin` /
+`_admin_ok`).
 
-## المرحلة الجاية — فتحي
+## التحقق (Verification)
 
-عشان نفعّل تبويب فتحي (`enabled: true` في `config.js`) محتاجين على مشروع فتحي:
+**عون كير:** الدخول من `login.html` → النظرة العامة → في «الاشتراكات» أوقف وحدة
+لعميل → الدكتور المفروض يتمنع منها (لأن `app_has_feature` بيقرا `feature_overrides`).
+في «الأطباء» اعمل دكتور جديد → يظهر كود الدخول في نافذة.
 
-- طبقة أدمن مطابقة لـ عون كير: جدول `app_admins` + دالة `app_is_admin()`
-  (نفس منطق `020_admin_dashboard.sql`) — المدير بيبقى عنده مستخدم Auth على
-  المشروعين، وبيسجّل دخول في الاتنين.
-- دوال `admin_*` للقراءة (شركات + شات من `conversations`/`messages`) وللكتابة:
-  - توجل `chat_enabled` + توجلات وحدات لكل شركة (نضيف عمود flags للشركات).
-  - إنشاء شركة + `set_dashboard_code` (موجود) لإدارة كود الدخول (إنشاء/تغيير).
-  - تفعيل/إيقاف شركة.
-- صفحات `fathi/overview.html` (فعلية) + `subscriptions.html` + `clients.html` +
-  `conversations.html` — بنفس مكوّنات `assets/` الجاهزة.
+**فتحي:** افتح تبويب فتحي → اكتب سر الأدمن → «العملاء» اعمل عميل جديد + كود →
+جرّب تدخل بيه على داشبورد العميل. في «الاشتراكات» اقفل الشات → تاب الشات يختفي
+عند العميل. «المحادثات» بتعرض رسايل العميل مع فتحي (لو الـ schema بتاع جدول
+`messages` مختلف عندك، الدالة `admin_company_chat` بتتعامل مع النسختين تلقائيًا).
 
 ## النشر (GitHub Pages)
-
-الريبو ده بينشر تلقائيًا على **awnagent.com** (ملف `CNAME`). اللوحة الموحّدة دي
-موجودة في **جذر الريبو**، فبتفتح مباشرة على `https://awnagent.com/login.html`.
-الداشبورد القديمة (`admin-dashboard/`) اتشالت واللوحة دي بقت البديل الكامل.
-أي push على فرع `main` بيتنشر خلال دقايق.
+الريبو بينشر على **awnagent.com** (`CNAME`). اللوحة في **جذر الريبو** فبتفتح على
+`https://awnagent.com/login.html`. أي push على `main` بيتنشر خلال دقايق.
