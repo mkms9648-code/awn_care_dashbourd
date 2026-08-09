@@ -23,8 +23,8 @@ window.APP_CONFIG = {
       // رابط n8n (من غير / في الآخر) — عشان لينك تنفيذ كل رد يشتغل
       N8N_BASE_URL: "https://n8n-c1bz.srv1841520.hstgr.cloud",
       // ويب-هوك مساعد المبيعات (n8n): بياخد {product,message,session_id,history}
-      // ويرجّع {reply}. سيبه فاضي لحد ما تستورد قالب n8n وتاخد الـ Production URL.
-      SALES_ENDPOINT: "",
+      // ويرجّع {reply}. نفس الرابط للمنتجين — بيفرّق بينهم بـ product في الطلب.
+      SALES_ENDPOINT: "https://n8n-c1bz.srv1841520.hstgr.cloud/webhook/sales-assistant",
     },
     fathi: {
       label: "فتحي ميزانية",
@@ -34,8 +34,8 @@ window.APP_CONFIG = {
       SUPABASE_URL: "https://jiniprotcrmsverqetmw.supabase.co",
       SUPABASE_ANON_KEY: "sb_publishable__50LG05sqjbG4ofbGaCC1g_O05FxmzL",
       N8N_BASE_URL: "https://n8n-c1bz.srv1841520.hstgr.cloud",
-      // ويب-هوك مساعد مبيعات فتحي (n8n) — نفس العقد. سيبه فاضي لحد ما تجهّزه.
-      SALES_ENDPOINT: "",
+      // ويب-هوك مساعد مبيعات فتحي (n8n) — نفس رابط عون كير، بيفرّق بـ product.
+      SALES_ENDPOINT: "https://n8n-c1bz.srv1841520.hstgr.cloud/webhook/sales-assistant",
       // فتحي متفعّل — محتاج تشغّل fathi_admin_dashboard.sql على مشروع فتحي +
       // تعيّن سر الأدمن: select set_admin_secret('...')
       enabled: true,
