@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>لوحة تحكم عون إيجنت</title>
+  <script src="config.js"></script>
+  <script type="module">
+    // موزّع: بيحوّل لصفحة النظرة العامة للمنتج المطلوب (أو عون كير افتراضيًا).
+    import { authClient, activeProduct } from "./assets/core.js";
+    const { data: { session } } = await authClient.auth.getSession();
+    if (!session) { location.replace("login.html"); }
+    else {
+      const p = activeProduct();
+      const enabled = window.APP_CONFIG.PRODUCTS[p]?.enabled !== false;
+      location.replace((enabled ? p : "awncare") + "/overview.html");
+    }
+  </script>
+</head>
+<body></body>
+</html>

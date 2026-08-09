@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>تسجيل الدخول — داشبورد المدير</title>
+  <title>تسجيل الدخول — لوحة تحكم عون إيجنت</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
@@ -14,15 +14,15 @@
 <body>
   <div class="login-wrap">
     <form class="login-card" id="login-form">
-      <h1>داشبورد <span class="brand-accent">المدير</span></h1>
-      <p class="muted">سجّل دخولك بحساب الإداري بتاعك.</p>
+      <h1>لوحة تحكم <span class="brand-accent">عون إيجنت</span></h1>
+      <p class="muted">سجّل دخولك بحساب المدير بتاعك.</p>
 
       <div class="field">
-        <label for="email">الإيميل</label>
+        <label class="lbl" for="email">الإيميل</label>
         <input type="email" id="email" required autocomplete="username" />
       </div>
       <div class="field">
-        <label for="password">كلمة السر</label>
+        <label class="lbl" for="password">كلمة السر</label>
         <input type="password" id="password" required autocomplete="current-password" />
       </div>
 
@@ -32,10 +32,9 @@
   </div>
 
   <script type="module">
-    import { supabase } from "./assets/supabase.js";
+    import { authClient } from "./assets/core.js";
 
-    // لو فيه جلسة شغالة أصلًا، حوّل على الصفحة الرئيسية على طول.
-    const { data: { session } } = await supabase.auth.getSession();
+    const { data: { session } } = await authClient.auth.getSession();
     if (session) location.href = "index.html";
 
     const form = document.getElementById("login-form");
@@ -44,15 +43,10 @@
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
       errorEl.textContent = "";
-
       const email = document.getElementById("email").value.trim();
       const password = document.getElementById("password").value;
-
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) {
-        errorEl.textContent = "فشل تسجيل الدخول: " + error.message;
-        return;
-      }
+      const { error } = await authClient.auth.signInWithPassword({ email, password });
+      if (error) { errorEl.textContent = "فشل تسجيل الدخول: " + error.message; return; }
       location.href = "index.html";
     });
   </script>

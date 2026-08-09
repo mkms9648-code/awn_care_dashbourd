@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>فتحي ميزانية — قريبًا</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css" />
+  <link rel="stylesheet" href="../assets/style.css" />
+  <script src="../config.js"></script>
+</head>
+<body>
+  <div class="app-shell">
+    <aside id="app-nav"></aside>
+    <main class="main">
+      <div class="page">
+        <div class="page-head">
+          <div>
+            <h1>فتحي ميزانية — لوحة التحكم</h1>
+            <p class="subtitle">المرحلة الجاية: نفس تحكم عون كير بالظبط، بس لعملاء فتحي.</p>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="empty-state" style="padding:32px">
+            <i class="ti ti-tools" style="font-size:2.4em;display:block;margin-bottom:14px;color:var(--accent)"></i>
+            <h3 style="margin:0 0 8px;color:var(--ink-strong)">تحت الإنشاء</h3>
+            <p class="muted" style="max-width:520px;margin:0 auto 20px;line-height:1.9">
+              لوحة فتحي هتشتغل على مشروع Supabase منفصل، ومحتاجة أول حاجة نبني ليها طبقة أدمن
+              (app_admins + دوال admin_*) زي عون كير بالظبط. بعدها هتلاقي هنا:
+            </p>
+            <div style="max-width:560px;margin:0 auto;text-align:right">
+              <div class="ch-row" style="padding:11px 2px;border-bottom:1px solid var(--rule)"><i class="ti ti-message-circle" style="color:var(--accent)"></i>&nbsp; متابعة الشات بين كل عميل وفتحي (نفس شاشة عون كير)</div>
+              <div class="ch-row" style="padding:11px 2px;border-bottom:1px solid var(--rule)"><i class="ti ti-toggle-right-filled" style="color:var(--accent)"></i>&nbsp; تشغيل/إيقاف كل وحدة لكل عميل (شات، مخزون، مناديب، عمليات…)</div>
+              <div class="ch-row" style="padding:11px 2px;border-bottom:1px solid var(--rule)"><i class="ti ti-key" style="color:var(--accent)"></i>&nbsp; إدارة كود دخول كل شركة: إنشاء / تغيير / إلغاء</div>
+              <div class="ch-row" style="padding:11px 2px"><i class="ti ti-users" style="color:var(--accent)"></i>&nbsp; إنشاء عملاء جدد وتفعيلهم/إيقافهم</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script type="module">
+    import { requireAdmin, applyProductTheme } from "../assets/core.js";
+    import { renderShell } from "../assets/shell.js";
+    applyProductTheme("fathi");
+    const session = await requireAdmin();
+    if (!session) throw new Error("not authorized");
+    renderShell(session, { product: "fathi", active: "overview" });
+  </script>
+</body>
+</html>

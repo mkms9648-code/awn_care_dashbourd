@@ -3,41 +3,44 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>نظرة عامة — داشبورد المدير</title>
+  <title>نظرة عامة — عون كير</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css" />
-  <link rel="stylesheet" href="assets/style.css" />
-  <script src="config.js"></script>
+  <link rel="stylesheet" href="../assets/style.css" />
+  <script src="../config.js"></script>
 </head>
 <body>
   <div class="app-shell">
     <aside id="app-nav"></aside>
     <main class="main">
       <div class="page">
-        <h1>نظرة عامة على الاشتراكات</h1>
-        <p class="subtitle">مين مشترك، في إيه باقة، وبيستخدم فعليًا إيه من البوتات التلاتة.</p>
+        <div class="page-head">
+          <div>
+            <h1>نظرة عامة — عون كير</h1>
+            <p class="subtitle">مين مشترك، في إيه باقة، وبيستخدم فعليًا إيه من البوتات التلاتة.</p>
+          </div>
+          <a href="subscriptions.html" class="btn"><i class="ti ti-toggle-right-filled"></i> إدارة الاشتراكات</a>
+        </div>
 
         <div class="stat-row" id="stat-row"></div>
-
-        <div class="card">
-          <div id="table-wrap">
-            <p class="muted">جاري التحميل…</p>
-          </div>
-        </div>
+        <div class="card"><div class="table-wrap" id="table-wrap"><p class="muted">جاري التحميل…</p></div></div>
       </div>
     </main>
   </div>
 
   <script type="module">
-    import { supabase, requireAdmin, escapeHtml } from "./assets/supabase.js";
-    import { renderNav } from "./assets/nav.js";
+    import { client, requireAdmin, applyProductTheme, escapeHtml } from "../assets/core.js";
+    import { renderShell } from "../assets/shell.js";
 
+    const PRODUCT = "awncare";
+    applyProductTheme(PRODUCT);
     const session = await requireAdmin();
     if (!session) throw new Error("not authorized");
-    renderNav(session, "overview");
+    renderShell(session, { product: PRODUCT, active: "overview" });
 
+    const sb = client(PRODUCT);
     const MODULES = [
       { key: "clinic", label: "عيادة" },
       { key: "round", label: "راوند" },
@@ -46,67 +49,50 @@
 
     function moduleBadge(mod, ws) {
       const used = (ws.modules_used_30d || []).includes(mod.key);
-      const entitled =
-        (ws.entitled_modules || []).includes(mod.key) ||
-        (ws.modules_with_channel || []).includes(mod.key);
-
+      const entitled = (ws.entitled_modules || []).includes(mod.key) || (ws.modules_with_channel || []).includes(mod.key);
       if (used) return `<span class="pill pill-good">${mod.label} · مُستخدم</span>`;
-      if (entitled) return `<span class="pill pill-warning">${mod.label} · متاح بس مش مستخدم</span>`;
+      if (entitled) return `<span class="pill pill-warning">${mod.label} · متاح</span>`;
       return `<span class="pill pill-muted">${mod.label} · —</span>`;
     }
 
-    const { data, error } = await supabase.rpc("admin_workspaces_overview");
-
+    const { data, error } = await sb.rpc("admin_workspaces_overview");
     const tableWrap = document.getElementById("table-wrap");
     const statRow = document.getElementById("stat-row");
 
     if (error) {
       tableWrap.innerHTML = `<p class="error-msg">فشل تحميل البيانات: ${escapeHtml(error.message)}</p>`;
     } else {
-      const workspaces = data || [];
-      const totalDoctors = workspaces.reduce((s, w) => s + (w.active_doctors || 0), 0);
-      const orgsCount = new Set(workspaces.map((w) => w.org_name)).size;
-
+      const ws = data || [];
+      const totalDoctors = ws.reduce((s, w) => s + (w.active_doctors || 0), 0);
+      const orgsCount = new Set(ws.map((w) => w.org_name)).size;
       statRow.innerHTML = `
         <div class="stat-tile"><div class="value">${orgsCount}</div><div class="label">مؤسسة</div></div>
-        <div class="stat-tile"><div class="value">${workspaces.length}</div><div class="label">مساحة عمل</div></div>
-        <div class="stat-tile"><div class="value">${totalDoctors}</div><div class="label">دكتور نشط</div></div>
-      `;
+        <div class="stat-tile"><div class="value">${ws.length}</div><div class="label">مساحة عمل</div></div>
+        <div class="stat-tile"><div class="value">${totalDoctors}</div><div class="label">دكتور نشط</div></div>`;
 
-      if (workspaces.length === 0) {
+      if (ws.length === 0) {
         tableWrap.innerHTML = `<div class="empty-state">مفيش مساحات عمل مسجّلة لسه.</div>`;
       } else {
         tableWrap.innerHTML = `
           <table>
-            <thead>
-              <tr>
-                <th>المؤسسة</th>
-                <th>مساحة العمل</th>
-                <th>الباقة</th>
-                <th class="num">أطباء نشطين</th>
-                <th>الوحدات (آخر 30 يوم)</th>
-              </tr>
-            </thead>
+            <thead><tr>
+              <th>المؤسسة</th><th>مساحة العمل</th><th>الباقة</th>
+              <th class="num">أطباء نشطين</th><th>الوحدات (آخر 30 يوم)</th><th></th>
+            </tr></thead>
             <tbody>
-              ${workspaces
-                .map(
-                  (w) => `
+              ${ws.map((w) => `
                 <tr>
                   <td>${escapeHtml(w.org_name)} <span class="muted">(${escapeHtml(w.org_kind || "")})</span></td>
                   <td>${escapeHtml(w.workspace_name)}</td>
                   <td>${w.plan_name ? escapeHtml(w.plan_name) : '<span class="pill pill-critical">بدون باقة</span>'}</td>
                   <td class="num">${w.active_doctors ?? 0}</td>
                   <td>${MODULES.map((m) => moduleBadge(m, w)).join(" ")}</td>
-                </tr>
-              `
-                )
-                .join("")}
+                  <td><a class="icon-btn" title="تحكم" href="subscriptions.html#ws-${w.workspace_id}"><i class="ti ti-settings"></i></a></td>
+                </tr>`).join("")}
             </tbody>
-          </table>
-        `;
+          </table>`;
       }
     }
   </script>
 </body>
 </html>
-

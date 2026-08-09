@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>الأطباء والدخول — عون كير</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css" />
+  <link rel="stylesheet" href="../assets/style.css" />
+  <script src="../config.js"></script>
+  <style>
+    .code-chip { font-family: "IBM Plex Sans", monospace; direction: ltr; background: var(--paper); border: 1px solid var(--rule); border-radius: 8px; padding: 4px 10px; font-weight: 700; letter-spacing: .08em; cursor: pointer; }
+    .code-chip:hover { border-color: var(--accent-border); background: var(--accent-light); }
+    .ch-row { display: flex; align-items: center; gap: 12px; padding: 11px 2px; border-bottom: 1px solid var(--rule); }
+    .ch-row:last-child { border-bottom: none; }
+    .ch-info { flex: 1; }
+  </style>
+</head>
+<body>
+  <div class="app-shell">
+    <aside id="app-nav"></aside>
+    <main class="main">
+      <div class="page">
+        <div class="page-head">
+          <div>
+            <h1>الأطباء والدخول</h1>
+            <p class="subtitle">أنشئ دكتور، أصدر/غيّر كود دخوله للتطبيق، فعّله أو أوقفه، وتحكم في قنواته.</p>
+          </div>
+          <button class="btn" id="add-btn"><i class="ti ti-user-plus"></i> دكتور جديد</button>
+        </div>
+
+        <div class="toolbar">
+          <div class="search-box" style="max-width:320px;flex:1">
+            <i class="ti ti-search"></i>
+            <input type="search" id="search" placeholder="ابحث باسم الدكتور…" />
+          </div>
+          <select id="ws-filter" style="max-width:260px"><option value="">كل مساحات العمل</option></select>
+        </div>
+
+        <div class="card"><div class="table-wrap" id="table-wrap"><p class="muted">جاري التحميل…</p></div></div>
+      </div>
+    </main>
+  </div>
+
+  <script type="module">
+    import { client, requireAdmin, applyProductTheme, escapeHtml, fmtDate } from "../assets/core.js";
+    import { renderShell } from "../assets/shell.js";
+    import { openModal, confirmDialog, toast, buildMenu, copyToClipboard, busy } from "../assets/ui.js";
+
+    const PRODUCT = "awncare";
+    applyProductTheme(PRODUCT);
+    const session = await requireAdmin();
+    if (!session) throw new Error("not authorized");
+    renderShell(session, { product: PRODUCT, active: "doctors" });
+
+    const sb = client(PRODUCT);
+    const tableWrap = document.getElementById("table-wrap");
+    const searchEl = document.getElementById("search");
+    const wsFilter = document.getElementById("ws-filter");
+
+    const STATUS = {
+      active:    { label: "نشط",   pill: "pill-good" },
+      suspended: { label: "موقوف", pill: "pill-critical" },
+      pending:   { label: "معلّق", pill: "pill-warning" },
+    };
+
+    let doctors = [];
+    let workspaces = [];
+
+    async function loadWorkspaces() {
+      const { data } = await sb.rpc("admin_workspaces_overview");
+      workspaces = (data || []).map((w) => ({ id: w.workspace_id, name: w.workspace_name, org: w.org_name }));
+      wsFilter.innerHTML = `<option value="">كل مساحات العمل</option>` +
+        workspaces.map((w) => `<option value="${escapeHtml(w.id)}">${escapeHtml(w.name)} — ${escapeHtml(w.org)}</option>`).join("");
+    }
+
+    async function loadDoctors() {
+      tableWrap.innerHTML = `<p class="muted">جاري التحميل…</p>`;
+      const { data, error } = await sb.rpc("admin_list_doctors", { p_workspace_id: wsFilter.value || null });
+      if (error) { tableWrap.innerHTML = `<p class="error-msg">${escapeHtml(error.message)}</p>`; return; }
+      doctors = data || [];
+      render();
+    }
+
+    function currentFiltered() {
+      const q = searchEl.value.trim().toLowerCase();
+      if (!q) return doctors;
+      return doctors.filter((d) => (d.full_name || "").toLowerCase().includes(q));
+    }
+
+    function render() {
+      const items = currentFiltered();
+      if (items.length === 0) { tableWrap.innerHTML = `<div class="empty-state">مفيش أطباء.</div>`; return; }
+      const table = document.createElement("table");
+      table.innerHTML = `
+        <thead><tr>
+          <th>الدكتور</th><th>مساحة العمل</th><th>الحالة</th><th>كود الدخول</th><th>آخر نشاط</th><th></th>
+        </tr></thead><tbody></tbody>`;
+      const tbody = table.querySelector("tbody");
+      items.forEach((d) => tbody.appendChild(doctorRow(d)));
+      tableWrap.innerHTML = "";
+      tableWrap.appendChild(table);
+    }
+
+    function doctorRow(d) {
+      const tr = document.createElement("tr");
+      const st = STATUS[d.status] || { label: d.status, pill: "pill-muted" };
+      tr.innerHTML = `
+        <td>
+          <div class="stack">
+            <strong>${escapeHtml(d.full_name)}</strong>
+            <span class="muted">${escapeHtml(d.specialty || "—")}</span>
+          </div>
+        </td>
+        <td>${escapeHtml(d.workspace_name)}<div class="muted">${escapeHtml(d.org_name)}</div></td>
+        <td><span class="pill ${st.pill}">${st.label}</span></td>
+        <td class="code-cell"></td>
+        <td class="muted">${d.last_active_at ? fmtDate(d.last_active_at) : "—"}</td>
+        <td class="actions-cell"></td>`;
+
+      const codeCell = tr.querySelector(".code-cell");
+      if (d.mobile_code) {
+        const chip = document.createElement("span");
+        chip.className = "code-chip";
+        chip.textContent = d.mobile_code;
+        chip.title = "اضغط للنسخ";
+        chip.addEventListener("click", () => copyToClipboard(d.mobile_code));
+        codeCell.appendChild(chip);
+      } else {
+        codeCell.innerHTML = `<span class="muted">مفيش</span>`;
+      }
+
+      const menu = buildMenu([
+        { label: d.mobile_code ? "عرض كود الدخول" : "إصدار كود دخول", icon: "ti-key", onClick: () => issueLogin(d, false) },
+        { label: "كود دخول جديد", icon: "ti-refresh", onClick: () => issueLogin(d, true) },
+        { sep: true },
+        d.status === "active"
+          ? { label: "إيقاف مؤقت", icon: "ti-player-pause", onClick: () => setStatus(d, "suspended") }
+          : { label: "تفعيل", icon: "ti-player-play", onClick: () => setStatus(d, "active") },
+        { label: "قنوات الدكتور", icon: "ti-plug", onClick: () => channelsModal(d) },
+        { sep: true },
+        { label: "إنهاء الخدمة", icon: "ti-user-off", danger: true, onClick: () => offboard(d) },
+      ]);
+      tr.querySelector(".actions-cell").appendChild(menu);
+      return tr;
+    }
+
+    // ---- إجراءات ----
+    async function issueLogin(d, reset) {
+      if (reset) {
+        const ok = await confirmDialog({
+          title: "كود دخول جديد؟", icon: "ti-refresh",
+          message: `هيتلغي كود الدخول القديم لـ «${d.full_name}» ويتعمل كود جديد. الكود القديم مش هيشتغل بعد كده.`,
+          confirmLabel: "اعمل كود جديد",
+        });
+        if (!ok) return;
+      }
+      const { data, error } = await sb.rpc("admin_issue_doctor_login", { p_staff_id: d.staff_id, p_reset: reset });
+      if (error) { toast(error.message, "error"); return; }
+      revealCode(d, data.code);
+      loadDoctors();
+    }
+
+    function revealCode(d, code) {
+      openModal({
+        title: "كود دخول التطبيق", subtitle: d.full_name, icon: "ti-key",
+        body: `
+          <p class="muted" style="margin:0 0 10px">ده الكود اللي الدكتور بيدخل بيه على تطبيق عون كير. انسخه وابعتهوله.</p>
+          <div class="code-reveal"><span class="code-value">${escapeHtml(code)}</span></div>`,
+        actionsLeadSpacer: true,
+        actions: [
+          { label: "نسخ الكود", variant: "btn-outline", icon: "ti-copy", onClick: () => copyToClipboard(code) },
+          { label: "تمام", onClick: (close) => close() },
+        ],
+      });
+    }
+
+    async function setStatus(d, status) {
+      const { error } = await sb.rpc("admin_set_doctor_status", { p_staff_id: d.staff_id, p_status: status });
+      if (error) { toast(error.message, "error"); return; }
+      toast(status === "active" ? "اتفعّل" : "اتوقف", "good");
+      loadDoctors();
+    }
+
+    async function offboard(d) {
+      const ok = await confirmDialog({
+        title: "إنهاء خدمة الدكتور؟", icon: "ti-user-off", danger: true, confirmLabel: "إنهاء الخدمة",
+        message: `«${d.full_name}» هيتوقف وكل قنواته هتتقفل. ده قابل للرجوع (تقدر تفعّله وتعمله كود تاني بعدين).`,
+      });
+      if (!ok) return;
+      const { error } = await sb.rpc("admin_offboard_doctor", { p_staff_id: d.staff_id });
+      if (error) { toast(error.message, "error"); return; }
+      toast("اتنهت الخدمة", "good");
+      loadDoctors();
+    }
+
+    function channelsModal(d) {
+      const body = document.createElement("div");
+      if (!d.channels || d.channels.length === 0) {
+        body.innerHTML = `<div class="empty-state" style="padding:24px">مفيش قنوات للدكتور ده لسه. أصدر كود دخول الأول.</div>`;
+      } else {
+        d.channels.forEach((ch) => {
+          const row = document.createElement("div");
+          row.className = "ch-row";
+          row.innerHTML = `
+            <div class="ch-info">
+              <strong>${escapeHtml(ch.bot_key)}</strong> <span class="muted">· ${escapeHtml(ch.platform)}</span>
+              <div class="muted mono">${escapeHtml(ch.external_id)}</div>
+            </div>
+            <label class="switch"><input type="checkbox" ${ch.is_active ? "checked" : ""}><span class="track"></span></label>`;
+          const input = row.querySelector("input");
+          input.addEventListener("change", async () => {
+            input.disabled = true;
+            const { error } = await sb.rpc("admin_set_channel_active", { p_channel_id: ch.channel_id, p_is_active: input.checked });
+            input.disabled = false;
+            if (error) { toast(error.message, "error"); input.checked = !input.checked; return; }
+            ch.is_active = input.checked;
+            toast("اتحفظ", "good", 1200);
+          });
+          body.appendChild(row);
+        });
+      }
+      openModal({ title: "قنوات الدكتور", subtitle: d.full_name, icon: "ti-plug", body,
+        actionsLeadSpacer: true, actions: [{ label: "تمام", onClick: (close) => close() }] });
+    }
+
+    // ---- إنشاء دكتور ----
+    document.getElementById("add-btn").addEventListener("click", () => {
+      const wsOpts = workspaces.map((w) => `<option value="${escapeHtml(w.id)}">${escapeHtml(w.name)} — ${escapeHtml(w.org)}</option>`).join("");
+      const body = document.createElement("div");
+      body.innerHTML = `
+        <div class="field"><label class="lbl">مساحة العمل</label><select id="f-ws">${wsOpts || '<option value="">لا يوجد</option>'}</select></div>
+        <div class="field"><label class="lbl">اسم الدكتور</label><input type="text" id="f-name" placeholder="د. …" /></div>
+        <div class="field"><label class="lbl">التخصص (اختياري)</label><input type="text" id="f-spec" /></div>
+        <div class="field"><label class="lbl">رقم الترخيص (اختياري)</label><input type="text" id="f-lic" /></div>
+        <div class="hint">بعد الحفظ هيتعمل كود دخول تلقائيًا ويظهرلك تنسخه.</div>`;
+      const m = openModal({
+        title: "دكتور جديد", icon: "ti-user-plus", body, actionsLeadSpacer: true,
+        actions: [
+          { label: "إلغاء", variant: "btn-neutral", onClick: (close) => close() },
+          { label: "إنشاء", icon: "ti-check", onClick: async (close) => {
+              const ws = body.querySelector("#f-ws").value;
+              const name = body.querySelector("#f-name").value.trim();
+              if (!ws) { toast("اختار مساحة عمل", "error"); return; }
+              if (!name) { toast("اكتب اسم الدكتور", "error"); return; }
+              const btn = m.root.querySelector('[data-act="1"]');
+              const restore = busy(btn, "بيحفظ…");
+              const { data, error } = await sb.rpc("admin_create_doctor", {
+                p_workspace_id: ws, p_full_name: name,
+                p_specialty: body.querySelector("#f-spec").value.trim() || null,
+                p_license_no: body.querySelector("#f-lic").value.trim() || null,
+              });
+              if (error) { restore(); toast(error.message, "error"); return; }
+              const li = await sb.rpc("admin_issue_doctor_login", { p_staff_id: data.staff_id, p_reset: false });
+              close();
+              toast("اتعمل الدكتور", "good");
+              if (!li.error) revealCode({ full_name: name }, li.data.code);
+              loadDoctors();
+            } },
+        ],
+      });
+    });
+
+    searchEl.addEventListener("input", render);
+    wsFilter.addEventListener("change", loadDoctors);
+
+    await loadWorkspaces();
+    await loadDoctors();
+  </script>
+</body>
+</html>
