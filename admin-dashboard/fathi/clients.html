@@ -16,6 +16,8 @@
     .logo-edit-box { display: flex; align-items: center; gap: 12px; }
     .logo-preview { width: 64px; height: 64px; border-radius: 12px; border: 1px solid var(--rule); background: var(--paper); display: flex; align-items: center; justify-content: center; overflow: hidden; color: var(--grey-2); }
     .logo-preview img { width: 100%; height: 100%; object-fit: cover; }
+    .code-chip { font-family: "IBM Plex Sans", monospace; direction: ltr; background: var(--paper); border: 1px solid var(--rule); border-radius: 8px; padding: 4px 10px; font-weight: 700; letter-spacing: .08em; cursor: pointer; display: inline-block; }
+    .code-chip:hover { border-color: var(--accent-border); background: var(--accent-light); }
   </style>
 </head>
 <body>
@@ -94,9 +96,22 @@
         <td>${escapeHtml(c.currency || "—")}</td>
         <td><span class="pill ${c.is_active ? "pill-good" : "pill-critical"}">${c.is_active ? "مفعّل" : "موقوف"}</span></td>
         <td><span class="pill ${c.chat_enabled ? "pill-good" : "pill-muted"}">${c.chat_enabled ? "مفتوح" : "مقفول"}</span></td>
-        <td>${c.has_code ? '<span class="pill pill-accent">موجود</span>' : '<span class="pill pill-muted">مفيش</span>'}</td>
+        <td class="code-cell"></td>
         <td class="muted">${fmtDate(c.created_at)}</td>
         <td class="actions-cell"></td>`;
+      const codeCell = tr.querySelector(".code-cell");
+      if (c.code) {
+        const chip = document.createElement("span");
+        chip.className = "code-chip";
+        chip.textContent = c.code;
+        chip.title = "اضغط للنسخ";
+        chip.addEventListener("click", () => copyToClipboard(c.code));
+        codeCell.appendChild(chip);
+      } else if (c.has_code) {
+        codeCell.innerHTML = `<span class="pill pill-muted" title="اعمل «كود جديد» عشان تقدر تنسخه">موجود</span>`;
+      } else {
+        codeCell.innerHTML = `<span class="pill pill-muted">مفيش</span>`;
+      }
       const menu = buildMenu([
         { label: "تعديل (اسم / لوجو)", icon: "ti-edit", onClick: () => editCompany(c) },
         { sep: true },
