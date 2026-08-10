@@ -140,6 +140,30 @@ export async function copyToClipboard(text) {
   }
 }
 
+// بيقرا صورة ويصغّرها (canvas) لأقصى بُعد max، ويرجّع data URL صغير — مناسب
+// للّوجوهات المخزّنة كـ base64 في قاعدة البيانات (حجم صغير + تحميل سريع).
+export function readImageResized(file, max = 256) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = reject;
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = reject;
+      img.onload = () => {
+        let w = img.width, h = img.height;
+        if (w > h) { if (w > max) { h = Math.round((h * max) / w); w = max; } }
+        else { if (h > max) { w = Math.round((w * max) / h); h = max; } }
+        const c = document.createElement("canvas");
+        c.width = w; c.height = h;
+        c.getContext("2d").drawImage(img, 0, 0, w, h);
+        resolve(c.toDataURL("image/png"));
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
 // حالة تحميل مؤقتة على زرار -> بيرجّع دالة استرجاع
 export function busy(btn, label = "جاري…") {
   const prev = btn.innerHTML;

@@ -10,6 +10,13 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css" />
   <link rel="stylesheet" href="../assets/style.css" />
   <script src="../config.js"></script>
+  <style>
+    .c-logo { width: 38px; height: 38px; border-radius: 9px; object-fit: cover; background: var(--ink-strong); color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: .82em; flex-shrink: 0; overflow: hidden; }
+    .c-logo img { width: 100%; height: 100%; object-fit: cover; }
+    .logo-edit-box { display: flex; align-items: center; gap: 12px; }
+    .logo-preview { width: 64px; height: 64px; border-radius: 12px; border: 1px solid var(--rule); background: var(--paper); display: flex; align-items: center; justify-content: center; overflow: hidden; color: var(--grey-2); }
+    .logo-preview img { width: 100%; height: 100%; object-fit: cover; }
+  </style>
 </head>
 <body>
   <div class="app-shell">
@@ -34,10 +41,10 @@
   </div>
 
   <script type="module">
-    import { requireAdmin, applyProductTheme, escapeHtml, fmtDate } from "../assets/core.js";
+    import { requireAdmin, applyProductTheme, escapeHtml, fmtDate, initials } from "../assets/core.js";
     import { renderShell } from "../assets/shell.js";
     import { ensureSecret, rpc } from "../assets/fathi.js";
-    import { openModal, confirmDialog, toast, buildMenu, copyToClipboard, busy } from "../assets/ui.js";
+    import { openModal, confirmDialog, toast, buildMenu, copyToClipboard, busy, readImageResized } from "../assets/ui.js";
 
     applyProductTheme("fathi");
     const session = await requireAdmin();
@@ -78,7 +85,12 @@
     function row(c) {
       const tr = document.createElement("tr");
       tr.innerHTML = `
-        <td><strong>${escapeHtml(c.name)}</strong>${c.industry ? `<div class="muted">${escapeHtml(c.industry)}</div>` : ""}</td>
+        <td>
+          <div style="display:flex;align-items:center;gap:10px">
+            <div class="c-logo">${c.logo ? `<img src="${escapeHtml(c.logo)}" alt="">` : escapeHtml(initials(c.name))}</div>
+            <div><strong>${escapeHtml(c.name)}</strong>${c.industry ? `<div class="muted">${escapeHtml(c.industry)}</div>` : ""}</div>
+          </div>
+        </td>
         <td>${escapeHtml(c.currency || "—")}</td>
         <td><span class="pill ${c.is_active ? "pill-good" : "pill-critical"}">${c.is_active ? "مفعّل" : "موقوف"}</span></td>
         <td><span class="pill ${c.chat_enabled ? "pill-good" : "pill-muted"}">${c.chat_enabled ? "مفتوح" : "مقفول"}</span></td>
@@ -86,6 +98,8 @@
         <td class="muted">${fmtDate(c.created_at)}</td>
         <td class="actions-cell"></td>`;
       const menu = buildMenu([
+        { label: "تعديل (اسم / لوجو)", icon: "ti-edit", onClick: () => editCompany(c) },
+        { sep: true },
         { label: c.has_code ? "تغيير كود الدخول" : "تعيين كود دخول", icon: "ti-key", onClick: () => setCode(c) },
         ...(c.has_code ? [{ label: "إلغاء كود الدخول", icon: "ti-key-off", danger: true, onClick: () => clearCode(c) }] : []),
         { sep: true },
@@ -98,6 +112,52 @@
       ]);
       tr.querySelector(".actions-cell").appendChild(menu);
       return tr;
+    }
+
+    function editCompany(c) {
+      let logoVal = c.logo || null;
+      let logoChanged = false;
+      const form = document.createElement("div");
+      form.innerHTML = `
+        <div class="field">
+          <label class="lbl">اللوجو</label>
+          <div class="logo-edit-box">
+            <div class="logo-preview" id="lp"></div>
+            <div style="display:flex;flex-direction:column;gap:6px">
+              <button type="button" class="btn btn-neutral btn-sm" id="lup"><i class="ti ti-upload"></i> رفع صورة</button>
+              <button type="button" class="btn btn-danger-outline btn-sm" id="lrm"><i class="ti ti-trash"></i> مسح</button>
+            </div>
+            <input type="file" id="lfile" accept="image/*" hidden>
+          </div>
+        </div>
+        <div class="field"><label class="lbl">اسم الشركة</label><input type="text" id="cn"></div>`;
+      form.querySelector("#cn").value = c.name || "";
+      const renderLogo = () => { form.querySelector("#lp").innerHTML = logoVal ? `<img src="${escapeHtml(logoVal)}" alt="">` : `<i class="ti ti-photo"></i>`; };
+      renderLogo();
+      form.querySelector("#lup").addEventListener("click", () => form.querySelector("#lfile").click());
+      form.querySelector("#lfile").addEventListener("change", async (e) => {
+        const f = e.target.files[0]; e.target.value = "";
+        if (!f) return;
+        if (!f.type.startsWith("image/")) { toast("اختار صورة", "error"); return; }
+        try { logoVal = await readImageResized(f, 256); logoChanged = true; renderLogo(); } catch { toast("مقدرش يقرا الصورة", "error"); }
+      });
+      form.querySelector("#lrm").addEventListener("click", () => { if (logoVal) { logoVal = null; logoChanged = true; renderLogo(); } });
+      const m = openModal({
+        title: "تعديل الشركة", subtitle: c.name, icon: "ti-edit", body: form, actionsLeadSpacer: true,
+        actions: [
+          { label: "إلغاء", variant: "btn-neutral", onClick: (close) => close() },
+          { label: "حفظ", icon: "ti-check", onClick: async (close) => {
+              const name = form.querySelector("#cn").value.trim();
+              if (!name) { toast("الاسم مطلوب", "error"); return; }
+              const btn = m.root.querySelector('[data-act="1"]'); const restore = busy(btn, "بيحفظ…");
+              try {
+                if (name !== c.name) { const r = await rpc("admin_rename_company", { p_company_id: c.id, p_name: name }); if (r.error) throw r.error; }
+                if (logoChanged) { const r = await rpc("admin_set_company_logo", { p_company_id: c.id, p_logo: logoVal || "" }); if (r.error) throw r.error; }
+              } catch (err) { restore(); toast(err.message || "خطأ", "error"); return; }
+              close(); toast("اتحفظ", "good"); load();
+            } },
+        ],
+      });
     }
 
     function setCode(c) {

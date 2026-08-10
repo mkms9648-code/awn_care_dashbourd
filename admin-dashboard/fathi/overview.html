@@ -10,6 +10,10 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css" />
   <link rel="stylesheet" href="../assets/style.css" />
   <script src="../config.js"></script>
+  <style>
+    .c-logo { width: 34px; height: 34px; border-radius: 8px; object-fit: cover; background: var(--ink-strong); color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: .78em; flex-shrink: 0; overflow: hidden; }
+    .c-logo img { width: 100%; height: 100%; object-fit: cover; }
+  </style>
 </head>
 <body>
   <div class="app-shell">
@@ -30,7 +34,7 @@
   </div>
 
   <script type="module">
-    import { requireAdmin, applyProductTheme, escapeHtml, fmtDate } from "../assets/core.js";
+    import { requireAdmin, applyProductTheme, escapeHtml, fmtDate, initials } from "../assets/core.js";
     import { renderShell } from "../assets/shell.js";
     import { ensureSecret, rpc } from "../assets/fathi.js";
 
@@ -66,7 +70,12 @@
             <tbody>
               ${cs.map((c) => `
                 <tr>
-                  <td><strong>${escapeHtml(c.name)}</strong>${c.industry ? `<div class="muted">${escapeHtml(c.industry)}</div>` : ""}</td>
+                  <td>
+                    <div style="display:flex;align-items:center;gap:10px">
+                      <div class="c-logo">${c.logo ? `<img src="${escapeHtml(c.logo)}" alt="">` : escapeHtml(initials(c.name))}</div>
+                      <div><strong>${escapeHtml(c.name)}</strong>${c.industry ? `<div class="muted">${escapeHtml(c.industry)}</div>` : ""}</div>
+                    </div>
+                  </td>
                   <td>${escapeHtml(c.currency || "—")}</td>
                   <td><span class="pill ${c.is_active ? "pill-good" : "pill-critical"}">${c.is_active ? "مفعّل" : "موقوف"}</span></td>
                   <td><span class="pill ${c.chat_enabled ? "pill-good" : "pill-muted"}">${c.chat_enabled ? "مفتوح" : "مقفول"}</span></td>
