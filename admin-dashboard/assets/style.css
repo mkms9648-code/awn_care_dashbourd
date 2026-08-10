@@ -218,11 +218,11 @@ label.lbl { display: block; font-size: 0.82em; color: var(--grey-1); font-weight
 /* قائمة إجراءات منسدلة على مستوى الصف */
 .menu { position: relative; display: inline-block; }
 .menu-panel {
-  position: absolute; inset-inline-end: 0; top: calc(100% + 6px); z-index: 40;
+  position: fixed; z-index: 120;
   background: var(--white); border: 1px solid var(--rule); border-radius: 10px;
-  box-shadow: var(--shadow-md); min-width: 210px; padding: 6px; display: none;
+  box-shadow: var(--shadow-md); min-width: 210px; max-width: 92vw; padding: 6px; display: none;
 }
-.menu.open .menu-panel { display: block; }
+.menu-panel.open { display: block; }
 .menu-item {
   display: flex; align-items: center; gap: 10px; width: 100%;
   padding: 9px 11px; border-radius: 7px; border: none; background: transparent;

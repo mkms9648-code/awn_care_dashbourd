@@ -106,28 +106,46 @@ export function confirmDialog({ title, message, confirmLabel = "تأكيد", dan
 export function buildMenu(items = []) {
   const wrap = document.createElement("div");
   wrap.className = "menu";
-  wrap.innerHTML = `<button class="icon-btn" title="إجراءات"><i class="ti ti-dots-vertical"></i></button><div class="menu-panel"></div>`;
-  const panel = wrap.querySelector(".menu-panel");
+  wrap.innerHTML = `<button class="icon-btn" title="إجراءات"><i class="ti ti-dots-vertical"></i></button>`;
+  const btn = wrap.querySelector(".icon-btn");
 
+  // اللوحة (panel) بتتحط في <body> وقت الفتح بـ position:fixed عشان ما تتقصّش
+  // من أي حاوية فيها overflow (زي الجداول). بتتقفل بأي كليك/سكرول/تغيير حجم.
+  const panel = document.createElement("div");
+  panel.className = "menu-panel menu-floating";
   items.forEach((it) => {
     if (it.sep) { const s = document.createElement("div"); s.className = "menu-sep"; panel.appendChild(s); return; }
     const b = document.createElement("button");
     b.className = "menu-item" + (it.danger ? " danger" : "");
     b.innerHTML = `<i class="ti ${it.icon || "ti-point"}"></i><span></span>`;
     b.querySelector("span").textContent = it.label;
-    b.addEventListener("click", () => { closeAllMenus(); it.onClick?.(); });
+    b.addEventListener("click", (e) => { e.stopPropagation(); closeAllMenus(); it.onClick?.(); });
     panel.appendChild(b);
   });
 
-  wrap.querySelector(".icon-btn").addEventListener("click", (e) => {
+  function place() {
+    const r = btn.getBoundingClientRect();
+    panel.style.right = Math.max(8, window.innerWidth - r.right) + "px";
+    const ph = panel.offsetHeight;
+    if (r.bottom + ph + 8 > window.innerHeight && r.top - ph - 8 > 0) panel.style.top = (r.top - ph - 6) + "px";
+    else panel.style.top = (r.bottom + 6) + "px";
+  }
+  btn.addEventListener("click", (e) => {
     e.stopPropagation();
-    const wasOpen = wrap.classList.contains("open");
+    const isOpen = panel.parentNode;
     closeAllMenus();
-    if (!wasOpen) wrap.classList.add("open");
+    if (isOpen) return;
+    document.body.appendChild(panel);
+    panel.classList.add("open");
+    place();
+    window.addEventListener("scroll", closeAllMenus, { once: true, capture: true });
+    window.addEventListener("resize", closeAllMenus, { once: true });
   });
   return wrap;
 }
-function closeAllMenus() { document.querySelectorAll(".menu.open").forEach((m) => m.classList.remove("open")); }
+function closeAllMenus() {
+  document.querySelectorAll(".menu-floating.open").forEach((p) => { p.classList.remove("open"); p.remove(); });
+}
 document.addEventListener("click", closeAllMenus);
 
 // ---- Clipboard ------------------------------------------------------------
