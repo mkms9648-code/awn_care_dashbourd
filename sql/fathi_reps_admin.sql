@@ -138,3 +138,38 @@ begin
 end;
 $$;
 grant execute on function admin_rename_rep(text, uuid, text) to anon, authenticated;
+
+-- ============================================================================
+--  إتاحة لوجو الشركة لبورتال المناديب — إعادة تعريف rep_portal_data + logo
+--  (نفس الدالة من feature_rep_portal.sql مع إضافة logo في كائن company)
+-- ============================================================================
+create or replace function rep_portal_data(p_rep_code text)
+returns json
+language plpgsql security definer set search_path = public, extensions
+as $$
+declare v_rep reps%rowtype; v_company companies%rowtype;
+begin
+  select r.* into v_rep from rep_access ra join reps r on r.id = ra.rep_id
+  where ra.code_hash = crypt(p_rep_code, ra.code_hash);
+  if not found then return json_build_object('ok', false, 'error', 'كود الدخول غير صحيح'); end if;
+  if not v_rep.is_active then return json_build_object('ok', false, 'error', 'حسابك موقوف — كلّم الإدارة'); end if;
+
+  select * into v_company from companies where id = v_rep.company_id;
+
+  return json_build_object('ok', true,
+    'rep', json_build_object('rep_id', v_rep.id, 'name', v_rep.name),
+    'company', json_build_object('name', v_company.name, 'currency', v_company.currency, 'logo', v_company.logo),
+    'custody',
+      (select coalesce(json_agg(json_build_object(
+          'name', i.name, 'unit', i.unit, 'qty_on_hand', rc.qty_on_hand, 'price', i.base_price
+        ) order by i.name), '[]'::json)
+       from rep_custody rc join items i on i.id = rc.item_id
+       where rc.rep_id = v_rep.id and rc.qty_on_hand <> 0),
+    'catalog',
+      (select coalesce(json_agg(json_build_object(
+          'name', i.name, 'unit', i.unit, 'price', i.base_price
+        ) order by i.name), '[]'::json)
+       from items i where i.company_id = v_company.id and i.is_active));
+end;
+$$;
+grant execute on function rep_portal_data(text) to anon, authenticated;
