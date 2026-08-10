@@ -18,6 +18,10 @@
     .logo-preview img { width: 100%; height: 100%; object-fit: cover; }
     .code-chip { font-family: "IBM Plex Sans", monospace; direction: ltr; background: var(--paper); border: 1px solid var(--rule); border-radius: 8px; padding: 4px 10px; font-weight: 700; letter-spacing: .08em; cursor: pointer; display: inline-block; }
     .code-chip:hover { border-color: var(--accent-border); background: var(--accent-light); }
+    .rep-row { display: flex; align-items: center; gap: 12px; padding: 11px 2px; border-bottom: 1px solid var(--rule); }
+    .rep-row:last-child { border-bottom: none; }
+    .rep-info { flex: 1; min-width: 0; }
+    .rep-code { flex-shrink: 0; }
   </style>
 </head>
 <body>
@@ -114,6 +118,7 @@
       }
       const menu = buildMenu([
         { label: "تعديل (اسم / لوجو)", icon: "ti-edit", onClick: () => editCompany(c) },
+        { label: "المناديب", icon: "ti-users", onClick: () => manageReps(c) },
         { sep: true },
         { label: c.has_code ? "تغيير كود الدخول" : "تعيين كود دخول", icon: "ti-key", onClick: () => setCode(c) },
         ...(c.has_code ? [{ label: "إلغاء كود الدخول", icon: "ti-key-off", danger: true, onClick: () => clearCode(c) }] : []),
@@ -127,6 +132,142 @@
       ]);
       tr.querySelector(".actions-cell").appendChild(menu);
       return tr;
+    }
+
+    // ---- إدارة المناديب ----
+    async function manageReps(c) {
+      const box = document.createElement("div");
+      box.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px">
+          <span class="muted">لكل مندوب كود دخول لبورتال المناديب.</span>
+          <button class="btn btn-sm" id="add-rep"><i class="ti ti-user-plus"></i> مندوب جديد</button>
+        </div>
+        <div id="reps-list"><p class="muted">جاري التحميل…</p></div>`;
+      const listEl = box.querySelector("#reps-list");
+
+      async function refresh() {
+        const { data, error } = await rpc("admin_list_reps", { p_company_id: c.id });
+        if (error) { listEl.innerHTML = `<p class="error-msg">${escapeHtml(error.message)}</p>`; return; }
+        const reps = data || [];
+        if (reps.length === 0) { listEl.innerHTML = `<div class="empty-state" style="padding:20px">مفيش مناديب لسه.</div>`; return; }
+        listEl.innerHTML = "";
+        reps.forEach((r) => listEl.appendChild(repRow(r, refresh)));
+      }
+      box.querySelector("#add-rep").addEventListener("click", () => addRep(c, refresh));
+      openModal({ title: "المناديب", subtitle: c.name, icon: "ti-users", wide: true, body: box, actionsLeadSpacer: true, actions: [{ label: "تمام", onClick: (close) => close() }] });
+      refresh();
+    }
+
+    function repRow(r, refresh) {
+      const row = document.createElement("div");
+      row.className = "rep-row";
+      const codeHtml = r.code
+        ? `<span class="code-chip" title="اضغط للنسخ">${escapeHtml(r.code)}</span>`
+        : (r.has_code ? `<span class="pill pill-muted" title="اعمل كود جديد لنسخه">كود موجود</span>` : `<span class="pill pill-muted">مفيش كود</span>`);
+      row.innerHTML = `
+        <div class="rep-info">
+          <strong>${escapeHtml(r.name)}</strong>
+          <div class="muted">عمولة ${Number(r.commission_percent)}%</div>
+        </div>
+        <div class="rep-code">${codeHtml}</div>
+        <label class="switch" title="تفعيل/إيقاف"><input type="checkbox" ${r.is_active ? "checked" : ""}><span class="track"></span></label>
+        <div class="rep-actions"></div>`;
+      if (r.code) row.querySelector(".code-chip").addEventListener("click", () => copyToClipboard(r.code));
+      const sw = row.querySelector("input");
+      sw.addEventListener("change", async () => {
+        sw.disabled = true;
+        const { error } = await rpc("admin_set_rep_active", { p_rep_id: r.id, p_active: sw.checked });
+        sw.disabled = false;
+        if (error) { toast(error.message, "error"); sw.checked = !sw.checked; return; }
+        r.is_active = sw.checked; toast("اتحفظ", "good", 1000);
+      });
+      const menu = buildMenu([
+        { label: r.has_code ? "تغيير كود الدخول" : "تعيين كود دخول", icon: "ti-key", onClick: () => setRepCode(r, refresh) },
+        ...(r.has_code ? [{ label: "إلغاء الكود", icon: "ti-key-off", danger: true, onClick: async () => {
+            const ok = await confirmDialog({ title: "إلغاء كود المندوب؟", icon: "ti-key-off", danger: true, confirmLabel: "إلغاء", message: `«${r.name}» مش هيقدر يدخل البورتال.` });
+            if (!ok) return;
+            const { error } = await rpc("admin_clear_rep_code", { p_rep_id: r.id });
+            if (error) { toast(error.message, "error"); return; }
+            toast("اتلغى", "good"); refresh();
+          } }] : []),
+        { label: "تغيير الاسم", icon: "ti-edit", onClick: () => renameRep(r, refresh) },
+      ]);
+      row.querySelector(".rep-actions").appendChild(menu);
+      return row;
+    }
+
+    function setRepCode(r, refresh) {
+      const body = document.createElement("div");
+      body.innerHTML = `
+        <div class="field"><label class="lbl">كود دخول المندوب</label>
+          <div style="display:flex;gap:8px"><input type="text" id="code" class="mono" placeholder="مثلاً 4F9K2A">
+          <button class="btn btn-neutral btn-sm" id="gen" type="button"><i class="ti ti-dice"></i> توليد</button></div>
+        </div>
+        <div class="hint">المندوب بيدخل بيه على بورتال المناديب.</div>`;
+      body.querySelector("#gen").addEventListener("click", () => body.querySelector("#code").value = randomCode());
+      const m = openModal({
+        title: r.has_code ? "تغيير كود المندوب" : "تعيين كود المندوب", subtitle: r.name, icon: "ti-key",
+        body, actionsLeadSpacer: true,
+        actions: [
+          { label: "إلغاء", variant: "btn-neutral", onClick: (close) => close() },
+          { label: "حفظ", icon: "ti-check", onClick: async (close) => {
+              const code = body.querySelector("#code").value.trim();
+              if (!code) { toast("اكتب أو ولّد كود", "error"); return; }
+              const btn = m.root.querySelector('[data-act="1"]'); const restore = busy(btn, "بيحفظ…");
+              const { error } = await rpc("admin_set_rep_code", { p_rep_id: r.id, p_code: code });
+              if (error) { restore(); toast(error.message, "error"); return; }
+              close(); toast("اتحفظ", "good"); reveal({ name: r.name }, code); refresh();
+            } },
+        ],
+      });
+    }
+
+    function renameRep(r, refresh) {
+      const body = document.createElement("div");
+      body.innerHTML = `<div class="field"><label class="lbl">اسم المندوب</label><input type="text" id="n"></div>`;
+      body.querySelector("#n").value = r.name || "";
+      const m = openModal({
+        title: "تغيير اسم المندوب", icon: "ti-edit", body, actionsLeadSpacer: true,
+        actions: [
+          { label: "إلغاء", variant: "btn-neutral", onClick: (close) => close() },
+          { label: "حفظ", icon: "ti-check", onClick: async (close) => {
+              const n = body.querySelector("#n").value.trim();
+              if (!n) { toast("الاسم مطلوب", "error"); return; }
+              const btn = m.root.querySelector('[data-act="1"]'); const restore = busy(btn, "بيحفظ…");
+              const { error } = await rpc("admin_rename_rep", { p_rep_id: r.id, p_name: n });
+              if (error) { restore(); toast(error.message, "error"); return; }
+              close(); toast("اتحفظ", "good"); refresh();
+            } },
+        ],
+      });
+    }
+
+    function addRep(c, refresh) {
+      const body = document.createElement("div");
+      body.innerHTML = `
+        <div class="field"><label class="lbl">اسم المندوب</label><input type="text" id="rn"></div>
+        <div class="field"><label class="lbl">نسبة العمولة %</label><input type="text" id="rc" class="mono" value="50"></div>
+        <div class="field"><label class="lbl">كود الدخول (اختياري)</label>
+          <div style="display:flex;gap:8px"><input type="text" id="rk" class="mono" placeholder="سيبه فاضي وتعمله بعدين">
+          <button class="btn btn-neutral btn-sm" id="gen" type="button"><i class="ti ti-dice"></i> توليد</button></div>
+        </div>`;
+      body.querySelector("#gen").addEventListener("click", () => body.querySelector("#rk").value = randomCode());
+      const m = openModal({
+        title: "مندوب جديد", subtitle: c.name, icon: "ti-user-plus", body, actionsLeadSpacer: true,
+        actions: [
+          { label: "إلغاء", variant: "btn-neutral", onClick: (close) => close() },
+          { label: "إنشاء", icon: "ti-check", onClick: async (close) => {
+              const name = body.querySelector("#rn").value.trim();
+              if (!name) { toast("اكتب اسم المندوب", "error"); return; }
+              const comm = parseFloat(body.querySelector("#rc").value) || 50;
+              const code = body.querySelector("#rk").value.trim() || null;
+              const btn = m.root.querySelector('[data-act="1"]'); const restore = busy(btn, "بيحفظ…");
+              const { error } = await rpc("admin_create_rep", { p_company_id: c.id, p_name: name, p_commission: comm, p_code: code });
+              if (error) { restore(); toast(error.message, "error"); return; }
+              close(); toast("اتعمل المندوب", "good"); if (code) reveal({ name }, code); refresh();
+            } },
+        ],
+      });
     }
 
     function editCompany(c) {
