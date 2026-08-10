@@ -116,3 +116,24 @@ begin
 end;
 $$;
 grant execute on function admin_list_companies(text) to anon, authenticated;
+
+-- إتاحة اللوجو لتطبيق العميل (يقرأه بكود الدخول) — عشان يظهر في الهيدر/الفواتير.
+-- بيعيد تعريف dashboard_flags (من fathi_admin_dashboard.sql) + إضافة logo.
+create or replace function dashboard_flags(p_code text)
+returns json
+language plpgsql security definer set search_path = public, extensions
+as $$
+declare v_company companies%rowtype;
+begin
+  select c.* into v_company
+  from company_access ca join companies c on c.id = ca.company_id
+  where ca.code_hash = crypt(p_code, ca.code_hash);
+  if not found then return json_build_object('ok', false); end if;
+  return json_build_object('ok', true,
+    'chat_enabled', v_company.chat_enabled,
+    'is_active', v_company.is_active,
+    'feature_flags', v_company.feature_flags,
+    'logo', v_company.logo);
+end;
+$$;
+grant execute on function dashboard_flags(text) to anon, authenticated;
