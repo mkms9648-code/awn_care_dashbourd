@@ -156,20 +156,27 @@ begin
 
   select * into v_company from companies where id = v_rep.company_id;
 
+  -- ⚠️ لازم تفضل مطابقة لأحدث نسخة (feature_rep_customers_and_sale_date.sql):
+  -- بترجّع customers + حقول الصور/الكراتين — مع إضافة logo بس.
   return json_build_object('ok', true,
     'rep', json_build_object('rep_id', v_rep.id, 'name', v_rep.name),
     'company', json_build_object('name', v_company.name, 'currency', v_company.currency, 'logo', v_company.logo),
     'custody',
       (select coalesce(json_agg(json_build_object(
-          'name', i.name, 'unit', i.unit, 'qty_on_hand', rc.qty_on_hand, 'price', i.base_price
+          'name', i.name, 'unit', i.unit, 'qty_on_hand', rc.qty_on_hand, 'price', i.base_price,
+          'image_url', i.image_url, 'pieces_per_carton', i.pieces_per_carton, 'carton_price', i.carton_price
         ) order by i.name), '[]'::json)
        from rep_custody rc join items i on i.id = rc.item_id
        where rc.rep_id = v_rep.id and rc.qty_on_hand <> 0),
     'catalog',
       (select coalesce(json_agg(json_build_object(
-          'name', i.name, 'unit', i.unit, 'price', i.base_price
+          'name', i.name, 'unit', i.unit, 'price', i.base_price,
+          'image_url', i.image_url, 'pieces_per_carton', i.pieces_per_carton, 'carton_price', i.carton_price
         ) order by i.name), '[]'::json)
-       from items i where i.company_id = v_company.id and i.is_active));
+       from items i where i.company_id = v_company.id and i.is_active),
+    'customers',
+      (select coalesce(json_agg(json_build_object('id', p.id, 'name', p.name) order by p.name), '[]'::json)
+       from parties p where p.company_id = v_company.id and p.type in ('customer','both')));
 end;
 $$;
 grant execute on function rep_portal_data(text) to anon, authenticated;
