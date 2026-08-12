@@ -45,6 +45,10 @@
     .fx-foot { text-align: center; margin-top: 16px; color: #666; }
     .fx-foot b { display: block; color: var(--acc); font-size: 14px; }
     .fx-foot span { font-size: 12px; }
+    .fx-fimg { display: block; margin: 10px auto 0; object-fit: contain; max-width: 100%; }
+    .logo-edit-box { display: flex; align-items: center; gap: 12px; margin-top: 6px; }
+    .logo-preview { width: 64px; height: 64px; border-radius: 12px; border: 1px solid var(--rule); background: var(--paper); display: flex; align-items: center; justify-content: center; overflow: hidden; color: var(--grey-2); flex-shrink: 0; }
+    .logo-preview img { width: 100%; height: 100%; object-fit: contain; }
   </style>
 </head>
 <body>
@@ -82,7 +86,7 @@
     import { requireAdmin, applyProductTheme, escapeHtml } from "../assets/core.js";
     import { renderShell } from "../assets/shell.js";
     import { ensureSecret, rpc } from "../assets/fathi.js";
-    import { toast, busy } from "../assets/ui.js";
+    import { toast, busy, readImageResized } from "../assets/ui.js";
 
     applyProductTheme("fathi");
     const session = await requireAdmin();
@@ -98,6 +102,7 @@
       header_lines: [],
       show: { invoice_number: true, date: true, rep: true, customer: true, payment: true, notes: true },
       footer_top: "شكراً لتعاملكم معنا", footer_sub: "{company} — عبر فتحي", notes: "",
+      footer_image: null, footer_image_size: 44,
     };
     const CUR_SYM = { EGP: "ج.م", JOD: "د.أ", SAR: "ر.س", AED: "د.إ", USD: "$", EUR: "€" };
 
@@ -148,7 +153,7 @@
         <div class="fx-items">${rows}</div>
         <div class="fx-total"><span>الإجمالي المطلوب</span><span class="amt">${num(d.total)} ${S(cur2)}</span></div>
         ${(show.notes !== false && c.notes) ? `<div class="fx-notes">${S(c.notes)}</div>` : ""}
-        <div class="fx-foot">${footTop ? `<b>${S(footTop)}</b>` : ""}${footSub ? `<span>${S(footSub)}</span>` : ""}</div>
+        <div class="fx-foot">${footTop ? `<b>${S(footTop)}</b>` : ""}${footSub ? `<span>${S(footSub)}</span>` : ""}${c.footer_image ? `<img class="fx-fimg" src="${S(c.footer_image)}" style="height:${c.footer_image_size || 44}px">` : ""}</div>
       </div>`;
     }
 
@@ -218,6 +223,16 @@
           <h4>الفوتر</h4>
           <div class="field"><label class="lbl">سطر أساسي</label><input type="text" id="c-foot-top" value="${escapeHtml(cfg.footer_top || "")}"></div>
           <div class="field"><label class="lbl">سطر فرعي — استخدم {company} لاسم الشركة</label><input type="text" id="c-foot-sub" value="${escapeHtml(cfg.footer_sub || "")}"></div>
+          <label class="lbl">صورة تحت الفوتر (لوجو فتحي / توقيع / أي صورة)</label>
+          <div class="logo-edit-box">
+            <div class="logo-preview" id="fimg-prev"></div>
+            <div style="display:flex;flex-direction:column;gap:6px">
+              <button type="button" class="btn btn-neutral btn-sm" id="fimg-up"><i class="ti ti-upload"></i> رفع صورة</button>
+              <button type="button" class="btn btn-danger-outline btn-sm" id="fimg-rm"><i class="ti ti-trash"></i> مسح</button>
+            </div>
+            <input type="file" id="fimg-file" accept="image/*" hidden>
+          </div>
+          <div class="ctl-row" style="margin-top:8px"><label>حجم الصورة</label><input type="range" id="c-fimg-size" min="24" max="140" value="${cfg.footer_image_size}" style="flex:1"><span id="c-fimg-size-v" class="mono">${cfg.footer_image_size}px</span></div>
         </div>`;
 
       renderHeaderLines();
@@ -252,6 +267,18 @@
       $("#c-notes").addEventListener("input", (e) => { cfg.notes = e.target.value; preview(); });
       $("#c-foot-top").addEventListener("input", (e) => { cfg.footer_top = e.target.value; preview(); });
       $("#c-foot-sub").addEventListener("input", (e) => { cfg.footer_sub = e.target.value; preview(); });
+      const renderFimg = () => { $("#fimg-prev").innerHTML = cfg.footer_image ? `<img src="${cfg.footer_image}" alt="">` : `<i class="ti ti-photo"></i>`; };
+      renderFimg();
+      $("#fimg-up").addEventListener("click", () => $("#fimg-file").click());
+      $("#fimg-file").addEventListener("change", async (e) => {
+        const f = e.target.files[0]; e.target.value = "";
+        if (!f) return;
+        if (!f.type.startsWith("image/")) { toast("اختار صورة", "error"); return; }
+        try { cfg.footer_image = await readImageResized(f, 300); renderFimg(); preview(); }
+        catch { toast("مقدرش يقرا الصورة", "error"); }
+      });
+      $("#fimg-rm").addEventListener("click", () => { cfg.footer_image = null; renderFimg(); preview(); });
+      $("#c-fimg-size").addEventListener("input", (e) => { cfg.footer_image_size = +e.target.value; $("#c-fimg-size-v").textContent = e.target.value + "px"; preview(); });
     }
 
     function mergeCfg(saved) {
