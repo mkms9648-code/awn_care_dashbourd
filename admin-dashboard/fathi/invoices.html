@@ -92,6 +92,8 @@
 
     const DEFAULT_CFG = {
       logo: { show: true, size: 90, align: "center" },
+      company: { show: true, size: 20 },
+      divider: { show: true, style: "solid", color: "#e0e0e0", size: 1 },
       accent: "#0D3D2B", title: "فاتورة بيع",
       header_lines: [],
       show: { invoice_number: true, date: true, rep: true, customer: true, payment: true, notes: true },
@@ -118,12 +120,15 @@
       const S = (v) => String(v == null ? "" : v).replace(/[&<>"']/g, (x) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[x]));
       const num = (n) => (Number(n) || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
       const hls = (c.header_lines || []).filter((x) => x && x.trim());
+      const co = c.company || {}, coShow = co.show !== false, coSize = co.size || 20;
+      const dv = c.divider || {}, sep = dv.show !== false ? `${dv.size || 1}px ${dv.style || "solid"} ${dv.color || "#e0e0e0"}` : "none";
+      const items = d.items || [];
       const itemDetail = (it) => {
         const N = Number(it.pieces_per_carton) || 0, C = Number(it.cartons) || 0, P = Number(it.loose_pieces) || 0;
         if (N > 0 && C > 0) { let s = `${Math.round(C)} كرتونة × ${num(it.carton_price)}`; if (P > 0) s += ` + ${Math.round(P)} حبة × ${num(it.piece_price)}`; return s; }
         return `${num(it.quantity)} ${S(it.unit || "حبة")} × ${num(it.unit_price)}`;
       };
-      const rows = (d.items || []).map((it) => `<div class="fx-item"><div class="fx-item-n">${S(it.name)}</div><div class="fx-item-l"><span>${itemDetail(it)}</span><span class="fx-lt">${num(it.line_total)}</span></div></div>`).join("");
+      const rows = items.map((it, i) => `<div class="fx-item" style="border-bottom:${i < items.length - 1 ? sep : "none"}"><div class="fx-item-n">${S(it.name)}</div><div class="fx-item-l"><span>${itemDetail(it)}</span><span class="fx-lt">${num(it.line_total)}</span></div></div>`).join("");
       const meta = [];
       if (show.invoice_number !== false && d.entry_code) meta.push(["رقم الفاتورة", d.entry_code]);
       if (show.date !== false) meta.push(["التاريخ", d.sale_date]);
@@ -135,7 +140,7 @@
       return `<div class="fx-inv" style="--acc:${S(acc)}">
         <div class="fx-head" style="text-align:${align}">
           ${(logo.show !== false && d.logo) ? `<img class="fx-logo" src="${S(d.logo)}" style="width:${size}px;height:${size}px">` : ""}
-          <div class="fx-co">${S(d.company_name)}</div>
+          ${coShow ? `<div class="fx-co" style="font-size:${coSize}px">${S(d.company_name)}</div>` : ""}
           ${hls.map((l) => `<div class="fx-hl">${S(l)}</div>`).join("")}
           <div class="fx-title">${S(title)}</div>
         </div>
@@ -175,6 +180,23 @@
               <button data-al="left" class="${cfg.logo.align === "left" ? "active" : ""}">شمال</button>
             </div>
           </div>
+        </div>
+        <div class="ctl-group">
+          <h4>اسم الشركة</h4>
+          <div class="toggle-line"><span>إظهار اسم الشركة</span><label class="switch"><input type="checkbox" id="c-co-show" ${cfg.company.show ? "checked" : ""}><span class="track"></span></label></div>
+          <div class="ctl-row"><label>الحجم</label><input type="range" id="c-co-size" min="12" max="36" value="${cfg.company.size}" style="flex:1"><span id="c-co-size-v" class="mono">${cfg.company.size}px</span></div>
+        </div>
+        <div class="ctl-group">
+          <h4>الخط الفاصل بين المنتجات</h4>
+          <div class="toggle-line"><span>إظهار الخط</span><label class="switch"><input type="checkbox" id="c-dv-show" ${cfg.divider.show ? "checked" : ""}><span class="track"></span></label></div>
+          <div class="ctl-row"><label>الشكل</label><select id="c-dv-style" style="flex:1">
+            <option value="solid" ${cfg.divider.style === "solid" ? "selected" : ""}>خط متصل</option>
+            <option value="dashed" ${cfg.divider.style === "dashed" ? "selected" : ""}>متقطّع</option>
+            <option value="dotted" ${cfg.divider.style === "dotted" ? "selected" : ""}>منقّط</option>
+            <option value="double" ${cfg.divider.style === "double" ? "selected" : ""}>مزدوج</option>
+          </select></div>
+          <div class="ctl-row"><label>اللون</label><input type="color" id="c-dv-color" value="${cfg.divider.color}"><span class="mono">${cfg.divider.color}</span></div>
+          <div class="ctl-row"><label>السُّمك</label><input type="range" id="c-dv-size" min="1" max="6" value="${cfg.divider.size}" style="flex:1"><span id="c-dv-size-v" class="mono">${cfg.divider.size}px</span></div>
         </div>
         <div class="ctl-group">
           <h4>الألوان والعنوان</h4>
@@ -217,6 +239,12 @@
       controlsEl.querySelectorAll(".seg-align button").forEach((b) => b.addEventListener("click", () => {
         cfg.logo.align = b.dataset.al; controlsEl.querySelectorAll(".seg-align button").forEach((x) => x.classList.toggle("active", x === b)); preview();
       }));
+      $("#c-co-show").addEventListener("change", (e) => { cfg.company.show = e.target.checked; preview(); });
+      $("#c-co-size").addEventListener("input", (e) => { cfg.company.size = +e.target.value; $("#c-co-size-v").textContent = e.target.value + "px"; preview(); });
+      $("#c-dv-show").addEventListener("change", (e) => { cfg.divider.show = e.target.checked; preview(); });
+      $("#c-dv-style").addEventListener("change", (e) => { cfg.divider.style = e.target.value; preview(); });
+      $("#c-dv-color").addEventListener("input", (e) => { cfg.divider.color = e.target.value; e.target.nextElementSibling.textContent = e.target.value; preview(); });
+      $("#c-dv-size").addEventListener("input", (e) => { cfg.divider.size = +e.target.value; $("#c-dv-size-v").textContent = e.target.value + "px"; preview(); });
       $("#c-accent").addEventListener("input", (e) => { cfg.accent = e.target.value; e.target.nextElementSibling.textContent = e.target.value; preview(); });
       $("#c-title").addEventListener("input", (e) => { cfg.title = e.target.value; preview(); });
       $("#hl-add").addEventListener("click", () => { cfg.header_lines.push(""); renderHeaderLines(); preview(); });
@@ -231,6 +259,8 @@
       if (saved && typeof saved === "object") {
         Object.assign(c, saved);
         c.logo = Object.assign({}, DEFAULT_CFG.logo, saved.logo || {});
+        c.company = Object.assign({}, DEFAULT_CFG.company, saved.company || {});
+        c.divider = Object.assign({}, DEFAULT_CFG.divider, saved.divider || {});
         c.show = Object.assign({}, DEFAULT_CFG.show, saved.show || {});
         c.header_lines = Array.isArray(saved.header_lines) ? saved.header_lines.slice() : [];
       }
