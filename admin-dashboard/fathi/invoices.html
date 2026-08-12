@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>شكل الفواتير — فتحي ميزانية</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700;800&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css" />
+  <link rel="stylesheet" href="../assets/style.css" />
+  <script src="../config.js"></script>
+  <style>
+    .inv-layout { display: grid; grid-template-columns: 1fr 380px; gap: 18px; align-items: start; }
+    @media (max-width: 900px) { .inv-layout { grid-template-columns: 1fr; } }
+    .ctl-group { border-bottom: 1px solid var(--rule); padding: 14px 0; }
+    .ctl-group:last-child { border-bottom: none; }
+    .ctl-group h4 { margin: 0 0 10px; font-size: .82em; text-transform: uppercase; letter-spacing: .05em; color: var(--grey-2); }
+    .ctl-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; flex-wrap: wrap; }
+    .ctl-row label { font-size: .88em; color: var(--ink); min-width: 90px; }
+    .seg-align button { padding: 6px 12px; }
+    .hl-row { display: flex; gap: 8px; margin-bottom: 6px; }
+    .hl-row input { flex: 1; }
+    .toggle-line { display: flex; align-items: center; justify-content: space-between; padding: 7px 0; border-bottom: 1px solid var(--rule); }
+    .toggle-line:last-child { border-bottom: none; }
+    .preview-wrap { position: sticky; top: 20px; }
+    .preview-frame { background: repeating-conic-gradient(#f0ece6 0% 25%, #faf6f1 0% 50%) 50% / 20px 20px; border: 1px solid var(--rule); border-radius: 12px; padding: 18px; }
+    /* ===== شكل الفاتورة (fx-*) — نفس اللي بيتطبع عند المندوب ===== */
+    .fx-inv { max-width: 340px; margin: 0 auto; background: #fff; color: #1a1a1a; font-family: "IBM Plex Sans Arabic", sans-serif; padding: 18px; box-shadow: 0 4px 20px rgba(0,0,0,.12); border-radius: 6px; }
+    .fx-head { border-bottom: 2px solid #eee; padding-bottom: 12px; margin-bottom: 12px; }
+    .fx-logo { object-fit: contain; display: inline-block; margin-bottom: 8px; }
+    .fx-co { font-weight: 800; font-size: 20px; color: var(--acc); }
+    .fx-hl { font-size: 12px; color: #666; margin-top: 2px; }
+    .fx-title { font-weight: 800; font-size: 16px; color: var(--acc); margin-top: 6px; }
+    .fx-meta { margin: 10px 0; }
+    .fx-meta div { display: flex; justify-content: space-between; font-size: 13px; padding: 3px 0; }
+    .fx-meta .k { color: #888; }
+    .fx-items { margin: 8px 0; }
+    .fx-item { padding: 6px 0; border-bottom: 1px solid #eee; }
+    .fx-item-n { font-weight: 600; font-size: 13px; }
+    .fx-item-l { display: flex; justify-content: space-between; font-size: 12px; color: #555; margin-top: 2px; }
+    .fx-lt { font-weight: 700; color: #1a1a1a; font-variant-numeric: tabular-nums; }
+    .fx-total { display: flex; justify-content: space-between; font-weight: 800; font-size: 16px; margin-top: 10px; padding-top: 10px; border-top: 2px solid var(--acc); color: var(--acc); }
+    .fx-notes { font-size: 12px; color: #555; margin-top: 10px; border: 1px dashed #ddd; border-radius: 8px; padding: 8px; white-space: pre-wrap; }
+    .fx-foot { text-align: center; margin-top: 16px; color: #666; }
+    .fx-foot b { display: block; color: var(--acc); font-size: 14px; }
+    .fx-foot span { font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div class="app-shell">
+    <aside id="app-nav"></aside>
+    <main class="main">
+      <div class="page">
+        <div class="page-head">
+          <div>
+            <h1>شكل الفواتير</h1>
+            <p class="subtitle">اظبط شكل فاتورة كل شركة — اللوجو، الألوان، السطور، الحقول — وشوف المعاينة تتغيّر لحظيًا.</p>
+          </div>
+          <button class="btn" id="save-btn" disabled><i class="ti ti-device-floppy"></i> حفظ</button>
+        </div>
+
+        <div class="card" style="margin-bottom:16px">
+          <label class="lbl">اختار شركة</label>
+          <select id="co-picker"><option value="">— اختار —</option></select>
+        </div>
+
+        <div id="editor" style="display:none">
+          <div class="inv-layout">
+            <div class="card"><div id="controls"></div></div>
+            <div class="preview-wrap">
+              <div class="preview-frame"><div id="preview"></div></div>
+              <p class="hint" style="text-align:center">ده اللي هيتطبع عند المندوب.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script type="module">
+    import { requireAdmin, applyProductTheme, escapeHtml } from "../assets/core.js";
+    import { renderShell } from "../assets/shell.js";
+    import { ensureSecret, rpc } from "../assets/fathi.js";
+    import { toast, busy } from "../assets/ui.js";
+
+    applyProductTheme("fathi");
+    const session = await requireAdmin();
+    if (!session) throw new Error("not authorized");
+    renderShell(session, { product: "fathi", active: "invoices" });
+    await ensureSecret();
+
+    const DEFAULT_CFG = {
+      logo: { show: true, size: 90, align: "center" },
+      accent: "#0D3D2B", title: "فاتورة بيع",
+      header_lines: [],
+      show: { invoice_number: true, date: true, rep: true, customer: true, payment: true, notes: true },
+      footer_top: "شكراً لتعاملكم معنا", footer_sub: "{company} — عبر فتحي", notes: "",
+    };
+    const CUR_SYM = { EGP: "ج.م", JOD: "د.أ", SAR: "ر.س", AED: "د.إ", USD: "$", EUR: "€" };
+
+    const pickerEl = document.getElementById("co-picker");
+    const editorEl = document.getElementById("editor");
+    const controlsEl = document.getElementById("controls");
+    const previewEl = document.getElementById("preview");
+    const saveBtn = document.getElementById("save-btn");
+
+    let companies = [], cur = null, cfg = null;
+
+    // ===== باني الفاتورة (نفس المنطق المستخدم في بورتال المندوب) =====
+    function buildInvoiceHTML(c, d) {
+      c = c || {};
+      const logo = c.logo || {}, show = c.show || {};
+      const acc = c.accent || "#0D3D2B";
+      const align = logo.align || "center", size = logo.size || 90;
+      const title = c.title != null ? c.title : "فاتورة بيع";
+      const cur2 = d.currency_symbol || CUR_SYM[d.currency] || d.currency || "";
+      const S = (v) => String(v == null ? "" : v).replace(/[&<>"']/g, (x) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[x]));
+      const num = (n) => (Number(n) || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      const hls = (c.header_lines || []).filter((x) => x && x.trim());
+      const itemDetail = (it) => {
+        const N = Number(it.pieces_per_carton) || 0, C = Number(it.cartons) || 0, P = Number(it.loose_pieces) || 0;
+        if (N > 0 && C > 0) { let s = `${Math.round(C)} كرتونة × ${num(it.carton_price)}`; if (P > 0) s += ` + ${Math.round(P)} حبة × ${num(it.piece_price)}`; return s; }
+        return `${num(it.quantity)} ${S(it.unit || "حبة")} × ${num(it.unit_price)}`;
+      };
+      const rows = (d.items || []).map((it) => `<div class="fx-item"><div class="fx-item-n">${S(it.name)}</div><div class="fx-item-l"><span>${itemDetail(it)}</span><span class="fx-lt">${num(it.line_total)}</span></div></div>`).join("");
+      const meta = [];
+      if (show.invoice_number !== false && d.entry_code) meta.push(["رقم الفاتورة", d.entry_code]);
+      if (show.date !== false) meta.push(["التاريخ", d.sale_date]);
+      if (show.rep !== false && d.rep_name) meta.push(["المندوب", d.rep_name]);
+      if (show.customer !== false) meta.push(["العميل", d.customer_name || "نقدي"]);
+      if (show.payment !== false) meta.push(["الدفع", d.payment_type === "credit" ? "آجل (على الحساب)" : "كاش"]);
+      const footTop = c.footer_top != null ? c.footer_top : "شكراً لتعاملكم معنا";
+      const footSub = (c.footer_sub != null ? c.footer_sub : "{company} — عبر فتحي").replace("{company}", d.company_name || "");
+      return `<div class="fx-inv" style="--acc:${S(acc)}">
+        <div class="fx-head" style="text-align:${align}">
+          ${(logo.show !== false && d.logo) ? `<img class="fx-logo" src="${S(d.logo)}" style="width:${size}px;height:${size}px">` : ""}
+          <div class="fx-co">${S(d.company_name)}</div>
+          ${hls.map((l) => `<div class="fx-hl">${S(l)}</div>`).join("")}
+          <div class="fx-title">${S(title)}</div>
+        </div>
+        <div class="fx-meta">${meta.map(([k, v]) => `<div><span class="k">${S(k)}</span><span class="v">${S(v)}</span></div>`).join("")}</div>
+        <div class="fx-items">${rows}</div>
+        <div class="fx-total"><span>الإجمالي المطلوب</span><span class="amt">${num(d.total)} ${S(cur2)}</span></div>
+        ${(show.notes !== false && c.notes) ? `<div class="fx-notes">${S(c.notes)}</div>` : ""}
+        <div class="fx-foot">${footTop ? `<b>${S(footTop)}</b>` : ""}${footSub ? `<span>${S(footSub)}</span>` : ""}</div>
+      </div>`;
+    }
+
+    function sampleData() {
+      return {
+        company_name: cur.name, logo: cur.logo, currency: cur.currency,
+        rep_name: "محمود الشناوي", customer_name: "شركة الديار للتطوير", payment_type: "credit",
+        sale_date: "2026-08-10", entry_code: "JV-2026-0096",
+        items: [
+          { name: "دهان بلاستيك أبيض (بستلة 9ل)", quantity: 1, unit: "بستلة", unit_price: 759, line_total: 759 },
+          { name: "رمل ناعم", quantity: 2, unit: "متر", unit_price: 120, line_total: 240 },
+        ],
+        total: 999,
+      };
+    }
+
+    function preview() { previewEl.innerHTML = buildInvoiceHTML(cfg, sampleData()); }
+
+    function renderControls() {
+      controlsEl.innerHTML = `
+        <div class="ctl-group">
+          <h4>اللوجو</h4>
+          <div class="toggle-line"><span>إظهار اللوجو</span><label class="switch"><input type="checkbox" id="c-logo-show" ${cfg.logo.show ? "checked" : ""}><span class="track"></span></label></div>
+          <div class="ctl-row"><label>الحجم</label><input type="range" id="c-logo-size" min="40" max="160" value="${cfg.logo.size}" style="flex:1"><span id="c-logo-size-v" class="mono">${cfg.logo.size}px</span></div>
+          <div class="ctl-row"><label>المكان</label>
+            <div class="seg seg-align">
+              <button data-al="right" class="${cfg.logo.align === "right" ? "active" : ""}">يمين</button>
+              <button data-al="center" class="${cfg.logo.align === "center" ? "active" : ""}">وسط</button>
+              <button data-al="left" class="${cfg.logo.align === "left" ? "active" : ""}">شمال</button>
+            </div>
+          </div>
+        </div>
+        <div class="ctl-group">
+          <h4>الألوان والعنوان</h4>
+          <div class="ctl-row"><label>لون رئيسي</label><input type="color" id="c-accent" value="${cfg.accent}"><span class="mono">${cfg.accent}</span></div>
+          <div class="ctl-row"><label>عنوان الفاتورة</label><input type="text" id="c-title" value="${escapeHtml(cfg.title)}" style="flex:1"></div>
+        </div>
+        <div class="ctl-group">
+          <h4>سطور فوق (عنوان / تليفون / رقم ضريبي…)</h4>
+          <div id="hl-list"></div>
+          <button class="btn btn-neutral btn-sm" id="hl-add"><i class="ti ti-plus"></i> إضافة سطر</button>
+        </div>
+        <div class="ctl-group">
+          <h4>الحقول الظاهرة</h4>
+          ${[["invoice_number", "رقم الفاتورة"], ["date", "التاريخ"], ["rep", "المندوب"], ["customer", "العميل"], ["payment", "طريقة الدفع"], ["notes", "الملاحظات"]]
+            .map(([k, l]) => `<div class="toggle-line"><span>${l}</span><label class="switch"><input type="checkbox" data-show="${k}" ${cfg.show[k] !== false ? "checked" : ""}><span class="track"></span></label></div>`).join("")}
+          <div class="field" style="margin-top:10px"><label class="lbl">نص الملاحظات (اختياري)</label><textarea id="c-notes" rows="2">${escapeHtml(cfg.notes || "")}</textarea></div>
+        </div>
+        <div class="ctl-group">
+          <h4>الفوتر</h4>
+          <div class="field"><label class="lbl">سطر أساسي</label><input type="text" id="c-foot-top" value="${escapeHtml(cfg.footer_top || "")}"></div>
+          <div class="field"><label class="lbl">سطر فرعي — استخدم {company} لاسم الشركة</label><input type="text" id="c-foot-sub" value="${escapeHtml(cfg.footer_sub || "")}"></div>
+        </div>`;
+
+      renderHeaderLines();
+      wire();
+    }
+
+    function renderHeaderLines() {
+      const box = controlsEl.querySelector("#hl-list");
+      box.innerHTML = (cfg.header_lines || []).map((l, i) =>
+        `<div class="hl-row"><input type="text" data-hl="${i}" value="${escapeHtml(l)}"><button class="icon-btn" data-hl-del="${i}" title="حذف"><i class="ti ti-x"></i></button></div>`).join("");
+      box.querySelectorAll("[data-hl]").forEach((inp) => inp.addEventListener("input", () => { cfg.header_lines[+inp.dataset.hl] = inp.value; preview(); }));
+      box.querySelectorAll("[data-hl-del]").forEach((b) => b.addEventListener("click", () => { cfg.header_lines.splice(+b.dataset.hlDel, 1); renderHeaderLines(); preview(); }));
+    }
+
+    function wire() {
+      const $ = (s) => controlsEl.querySelector(s);
+      $("#c-logo-show").addEventListener("change", (e) => { cfg.logo.show = e.target.checked; preview(); });
+      $("#c-logo-size").addEventListener("input", (e) => { cfg.logo.size = +e.target.value; $("#c-logo-size-v").textContent = e.target.value + "px"; preview(); });
+      controlsEl.querySelectorAll(".seg-align button").forEach((b) => b.addEventListener("click", () => {
+        cfg.logo.align = b.dataset.al; controlsEl.querySelectorAll(".seg-align button").forEach((x) => x.classList.toggle("active", x === b)); preview();
+      }));
+      $("#c-accent").addEventListener("input", (e) => { cfg.accent = e.target.value; e.target.nextElementSibling.textContent = e.target.value; preview(); });
+      $("#c-title").addEventListener("input", (e) => { cfg.title = e.target.value; preview(); });
+      $("#hl-add").addEventListener("click", () => { cfg.header_lines.push(""); renderHeaderLines(); preview(); });
+      controlsEl.querySelectorAll("[data-show]").forEach((inp) => inp.addEventListener("change", () => { cfg.show[inp.dataset.show] = inp.checked; preview(); }));
+      $("#c-notes").addEventListener("input", (e) => { cfg.notes = e.target.value; preview(); });
+      $("#c-foot-top").addEventListener("input", (e) => { cfg.footer_top = e.target.value; preview(); });
+      $("#c-foot-sub").addEventListener("input", (e) => { cfg.footer_sub = e.target.value; preview(); });
+    }
+
+    function mergeCfg(saved) {
+      const c = JSON.parse(JSON.stringify(DEFAULT_CFG));
+      if (saved && typeof saved === "object") {
+        Object.assign(c, saved);
+        c.logo = Object.assign({}, DEFAULT_CFG.logo, saved.logo || {});
+        c.show = Object.assign({}, DEFAULT_CFG.show, saved.show || {});
+        c.header_lines = Array.isArray(saved.header_lines) ? saved.header_lines.slice() : [];
+      }
+      return c;
+    }
+
+    pickerEl.addEventListener("change", async () => {
+      cur = companies.find((c) => c.id === pickerEl.value) || null;
+      if (!cur) { editorEl.style.display = "none"; saveBtn.disabled = true; return; }
+      const { data, error } = await rpc("admin_get_invoice_config", { p_company_id: cur.id });
+      if (error) { toast(error.message, "error"); return; }
+      cfg = mergeCfg(data || {});
+      renderControls(); preview();
+      editorEl.style.display = "block"; saveBtn.disabled = false;
+    });
+
+    saveBtn.addEventListener("click", async () => {
+      if (!cur) return;
+      const restore = busy(saveBtn, "بيحفظ…");
+      const { error } = await rpc("admin_set_invoice_config", { p_company_id: cur.id, p_config: cfg });
+      restore();
+      if (error) { toast(error.message, "error"); return; }
+      toast("اتحفظ شكل الفاتورة", "good");
+    });
+
+    // boot
+    const { data, error } = await rpc("admin_list_companies");
+    if (error) { toast(error.message, "error"); }
+    else {
+      companies = data || [];
+      pickerEl.innerHTML = `<option value="">— اختار شركة —</option>` + companies.map((c) => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.name)}</option>`).join("");
+    }
+  </script>
+</body>
+</html>
