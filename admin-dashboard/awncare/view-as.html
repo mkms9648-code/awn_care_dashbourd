@@ -37,6 +37,7 @@
     .unit-h { display: flex; align-items: center; gap: 10px; margin: 4px 0 10px; font-weight: 700; color: var(--ink-strong); border-bottom: 2px solid var(--rule); padding-bottom: 6px; }
     .unit-count { background: var(--ink-strong); color: #fff; border-radius: 100px; font-size: .72em; padding: 1px 9px; font-variant-numeric: tabular-nums; }
     .unit-empty { color: var(--grey-2); font-size: .85em; padding: 4px 2px 6px; }
+    .pcard-foot { margin-top: 10px; border-top: 1px dashed var(--rule); padding-top: 9px; }
   </style>
 </head>
 <body>
@@ -65,7 +66,7 @@
   <script type="module">
     import { client, anonClient, requireAdmin, applyProductTheme, escapeHtml, fmtDate, initials } from "../assets/core.js";
     import { renderShell } from "../assets/shell.js";
-    import { openModal, toast } from "../assets/ui.js";
+    import { openModal, toast, busy } from "../assets/ui.js";
 
     const PRODUCT = "awncare";
     applyProductTheme(PRODUCT);
@@ -171,6 +172,27 @@
         slot.innerHTML = banner + `<div class="board">${results.map(cardHtml).join("")}</div>`;
       }
       slot.querySelectorAll(".pcard").forEach((el) => el.addEventListener("click", () => openPatient(el.dataset.enc)));
+      slot.querySelectorAll(".move-btn").forEach((b) => b.addEventListener("click", (e) => { e.stopPropagation(); openMove(b.dataset.enc); }));
+    }
+
+    async function openMove(encId) {
+      const units = await getUnits();
+      if (!units.length) { toast("مفيش أقسام لسه — ضيفها من «الاشتراكات والتحكم»", "error"); return; }
+      const body = document.createElement("div");
+      body.innerHTML = `<div class="field"><label class="lbl">انقل المريض لقسم</label>
+        <select id="to-unit">${units.map((u) => `<option value="${escapeHtml(u.id)}">${escapeHtml(u.name)}</option>`).join("")}</select></div>
+        <div class="hint">النقلة بتتسجّل كأكشن متدقّق (مين وامتى).</div>`;
+      const m = openModal({ title: "نقل لقسم", icon: "ti-arrows-exchange", body, actionsLeadSpacer: true, actions: [
+        { label: "إلغاء", variant: "btn-neutral", onClick: (c) => c() },
+        { label: "نقل", icon: "ti-check", onClick: async (close) => {
+            const uid = body.querySelector("#to-unit").value;
+            if (!uid) { toast("اختار قسم", "error"); return; }
+            const btn = m.root.querySelector('[data-act="1"]'); const restore = busy(btn, "بينقل…");
+            const { error } = await sb.rpc("admin_transfer_unit", { p_encounter_id: encId, p_to_unit_id: uid });
+            if (error) { restore(); toast(error.message, "error"); return; }
+            close(); toast("اتنقل المريض", "good"); loadBoard();
+          } },
+      ]});
     }
 
     function emptyHtml(botOff) {
@@ -182,16 +204,17 @@
       const wid = cur.workspace_id;
       if (!(wid in unitsCache)) {
         const { data } = await sb.rpc("admin_list_units", { p_workspace_id: wid });
-        unitsCache[wid] = (data || []).map((u) => u.name);
+        unitsCache[wid] = (data || []).map((u) => ({ id: u.id, name: u.name }));
       }
       return unitsCache[wid];
     }
 
     // بورد الراوند/العيادة مقسّم حسب القسم — بيعرض كل أقسام المستشفى (حتى الفاضية)
-    function renderGrouped(results, unitNames) {
+    function renderGrouped(results, units) {
       const byUnit = {};
       results.forEach((r) => { const k = r.unit || "__none__"; (byUnit[k] = byUnit[k] || []).push(r); });
-      const listed = new Set(unitNames || []);
+      const unitNames = (units || []).map((u) => u.name);
+      const listed = new Set(unitNames);
       const extras = Object.keys(byUnit).filter((k) => k !== "__none__" && !listed.has(k));
 
       let html = "";
@@ -225,6 +248,7 @@
         </div>
         ${r.attending ? `<div class="pmeta"><i class="ti ti-user"></i> ${escapeHtml(r.attending)}</div>` : ""}
         ${detail}
+        ${activeBot !== "ed" ? `<div class="pcard-foot"><button class="btn btn-neutral btn-sm move-btn" data-enc="${escapeHtml(r.encounter_id)}"><i class="ti ti-arrows-exchange"></i> نقل لقسم</button></div>` : ""}
       </div>`;
     }
 
