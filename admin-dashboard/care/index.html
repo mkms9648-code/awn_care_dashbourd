@@ -1,0 +1,1065 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
+<title>Awn Care — عون كير</title>
+<meta name="description" content="عون كير — مساعد الطبيب النائب" />
+
+<!-- iOS: خليها تحس إنها تطبيق -->
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Awn Care" />
+<meta name="theme-color" content="#0b0f14" media="(prefers-color-scheme: dark)" />
+<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+<link id="touchIcon" rel="apple-touch-icon" href="" />
+<link id="favIcon" rel="icon" href="" />
+
+<style>
+:root{
+  --accent:#ff3c00; --accent-2:#ff7a3c;
+  --bg:#f4f5f7; --bg-2:#eceef1; --card:#ffffff; --card-2:#f7f8fa;
+  --text:#0f172a; --muted:#64748b; --faint:#94a3b8;
+  --line:#e6e8ec; --line-2:#eef0f3;
+  --blue:#2563eb; --teal:#0d9488; --green:#16a34a; --amber:#d97706; --red:#dc2626;
+  --bubble-me:#ff3c00; --bubble-me-text:#fff; --bubble-ai:#ffffff; --bubble-ai-text:#0f172a;
+  --shadow:0 1px 2px rgba(16,24,40,.06),0 8px 24px rgba(16,24,40,.06);
+  --safe-top:env(safe-area-inset-top,0px); --safe-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0b0f14; --bg-2:#0f151c; --card:#151b22; --card-2:#1a212a;
+    --text:#e6edf3; --muted:#93a1b1; --faint:#6b7a8c;
+    --line:#212a34; --line-2:#1b232c;
+    --bubble-ai:#1c242e; --bubble-ai-text:#e6edf3;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 10px 30px rgba(0,0,0,.35);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0b0f14; --bg-2:#0f151c; --card:#151b22; --card-2:#1a212a;
+  --text:#e6edf3; --muted:#93a1b1; --faint:#6b7a8c;
+  --line:#212a34; --line-2:#1b232c;
+  --bubble-ai:#1c242e; --bubble-ai-text:#e6edf3;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 10px 30px rgba(0,0,0,.35);
+}
+
+*{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
+html,body{height:100%}
+body{
+  margin:0; background:var(--bg); color:var(--text);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans Arabic","Helvetica Neue",Arial,sans-serif;
+  -webkit-font-smoothing:antialiased; overscroll-behavior-y:none;
+  font-size:16px; line-height:1.5;
+}
+button{font-family:inherit; cursor:pointer; border:none; background:none; color:inherit}
+input,textarea{font-family:inherit; font-size:16px}
+.hidden{display:none !important}
+.spin{animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ============ Splash ============ */
+#splash{position:fixed; inset:0; z-index:100; background:var(--bg);
+  display:flex; flex-direction:column; align-items:center; justify-content:center; gap:18px;
+  transition:opacity .35s ease}
+.logo-badge{width:84px; height:84px; border-radius:22px;
+  background:linear-gradient(150deg,var(--accent),var(--accent-2));
+  display:grid; place-items:center; box-shadow:0 12px 34px rgba(255,60,0,.35)}
+.logo-badge svg{width:46px; height:46px}
+.brand-ar{font-weight:800; font-size:24px; letter-spacing:-.3px}
+.brand-en{color:var(--muted); font-size:13px; letter-spacing:2px; text-transform:uppercase}
+
+/* ============ Login ============ */
+#login{position:fixed; inset:0; z-index:80; background:var(--bg);
+  display:flex; flex-direction:column; padding:calc(var(--safe-top) + 8px) 22px calc(var(--safe-bottom) + 22px);
+  overflow:auto}
+.login-hero{flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px; text-align:center}
+.login-hero .logo-badge{width:72px;height:72px;border-radius:20px}
+.login-hero h1{margin:6px 0 0; font-size:22px; font-weight:800}
+.login-hero p{margin:0; color:var(--muted); font-size:14px; max-width:280px}
+.login-card{background:var(--card); border:1px solid var(--line); border-radius:20px; padding:18px;
+  box-shadow:var(--shadow)}
+.field-label{font-size:13px; color:var(--muted); margin:0 2px 8px; font-weight:600}
+.code-input{width:100%; text-align:center; letter-spacing:8px; font-weight:800; font-size:26px;
+  padding:16px 12px; border-radius:14px; border:1.5px solid var(--line); background:var(--card-2);
+  color:var(--text); text-transform:uppercase}
+.code-input:focus{outline:none; border-color:var(--accent)}
+.code-input::placeholder{letter-spacing:6px; color:var(--faint); font-weight:600}
+.btn-primary{width:100%; margin-top:14px; padding:15px; border-radius:14px; font-weight:800; font-size:16px;
+  color:#fff; background:linear-gradient(150deg,var(--accent),var(--accent-2));
+  display:flex; align-items:center; justify-content:center; gap:8px; transition:transform .06s}
+.btn-primary:active{transform:scale(.98)}
+.btn-primary[disabled]{opacity:.6}
+.login-note{margin-top:14px; font-size:12.5px; color:var(--faint); text-align:center; line-height:1.7}
+.err-box{margin-top:12px; background:color-mix(in srgb,var(--red) 12%,transparent);
+  border:1px solid color-mix(in srgb,var(--red) 35%,transparent); color:var(--red);
+  padding:11px 13px; border-radius:12px; font-size:13.5px; font-weight:600}
+
+/* ============ App shell ============ */
+#app{display:flex; flex-direction:column; height:100dvh}
+.topbar{position:sticky; top:0; z-index:20; background:color-mix(in srgb,var(--bg) 82%,transparent);
+  backdrop-filter:saturate(180%) blur(18px); -webkit-backdrop-filter:saturate(180%) blur(18px);
+  border-bottom:1px solid var(--line);
+  padding:calc(var(--safe-top) + 8px) 16px 10px; display:flex; align-items:center; gap:10px; min-height:52px}
+.topbar .tb-title{font-weight:800; font-size:18px; flex:1; display:flex; align-items:center; gap:9px}
+.tb-logo{width:28px; height:28px; border-radius:9px; background:linear-gradient(150deg,var(--accent),var(--accent-2));
+  display:grid; place-items:center; flex:none}
+.tb-logo svg{width:17px;height:17px}
+.icon-btn{width:38px; height:38px; border-radius:11px; display:grid; place-items:center; color:var(--muted);
+  background:var(--card); border:1px solid var(--line)}
+.icon-btn:active{transform:scale(.94)}
+.icon-btn svg{width:19px;height:19px}
+
+.view{flex:1; overflow:auto; -webkit-overflow-scrolling:touch}
+.tabbar{flex:none; display:flex; background:color-mix(in srgb,var(--bg) 86%,transparent);
+  backdrop-filter:saturate(180%) blur(18px); -webkit-backdrop-filter:saturate(180%) blur(18px);
+  border-top:1px solid var(--line); padding:6px 6px calc(var(--safe-bottom) + 6px)}
+.tab{flex:1; display:flex; flex-direction:column; align-items:center; gap:3px; padding:7px 2px 4px;
+  color:var(--faint); font-size:10.5px; font-weight:700; border-radius:12px; transition:color .15s}
+.tab svg{width:23px; height:23px}
+.tab.active{color:var(--accent)}
+.tab:active{transform:scale(.93)}
+
+/* ============ Chat ============ */
+.chat-wrap{display:flex; flex-direction:column; height:100%}
+.seg{display:flex; gap:4px; padding:10px 14px 6px; background:var(--bg)}
+.seg-track{flex:1; display:flex; background:var(--bg-2); border:1px solid var(--line); border-radius:13px; padding:3px}
+.seg-btn{flex:1; padding:8px; border-radius:10px; font-weight:700; font-size:14px; color:var(--muted);
+  display:flex; align-items:center; justify-content:center; gap:6px; transition:.15s}
+.seg-btn.active{background:var(--card); color:var(--text); box-shadow:0 1px 3px rgba(0,0,0,.12)}
+.seg-btn .dot{width:8px;height:8px;border-radius:50%}
+.thread{flex:1; overflow:auto; padding:8px 14px 6px; display:flex; flex-direction:column; gap:9px}
+.day-sep{align-self:center; font-size:11px; color:var(--faint); background:var(--bg-2); padding:3px 10px;
+  border-radius:20px; margin:6px 0; font-weight:600}
+.bubble{max-width:82%; padding:10px 13px; border-radius:18px; font-size:15px; line-height:1.55;
+  white-space:pre-wrap; word-wrap:break-word; box-shadow:var(--shadow); position:relative}
+.bubble .time{font-size:10px; opacity:.6; margin-top:3px; display:block}
+.b-me{align-self:flex-start; background:var(--bubble-me); color:var(--bubble-me-text); border-bottom-right-radius:6px}
+.b-ai{align-self:flex-end; background:var(--bubble-ai); color:var(--bubble-ai-text); border:1px solid var(--line); border-bottom-left-radius:6px}
+.b-att{display:flex; flex-wrap:wrap; gap:6px; margin-top:6px}
+.b-att img{width:120px; height:120px; object-fit:cover; border-radius:12px; background:var(--bg-2); border:1px solid var(--line)}
+.att-cap{font-size:12px; opacity:.75; margin-top:2px}
+.typing{align-self:flex-end; background:var(--bubble-ai); border:1px solid var(--line);
+  padding:12px 15px; border-radius:18px; border-bottom-left-radius:6px; display:flex; gap:4px}
+.typing i{width:7px;height:7px;border-radius:50%; background:var(--faint); animation:blink 1.2s infinite both}
+.typing i:nth-child(2){animation-delay:.2s} .typing i:nth-child(3){animation-delay:.4s}
+@keyframes blink{0%,80%,100%{opacity:.25} 40%{opacity:1}}
+.composer{flex:none; border-top:1px solid var(--line); background:var(--bg);
+  padding:8px 10px calc(var(--safe-bottom) + 8px); display:flex; align-items:flex-end; gap:7px}
+.composer .c-input{flex:1; background:var(--card); border:1px solid var(--line); border-radius:20px;
+  padding:9px 14px; color:var(--text); resize:none; max-height:120px; line-height:1.4}
+.composer .c-input:focus{outline:none; border-color:var(--accent)}
+.c-btn{width:42px; height:42px; border-radius:50%; flex:none; display:grid; place-items:center; color:var(--muted);
+  background:var(--card); border:1px solid var(--line)}
+.c-btn:active{transform:scale(.92)}
+.c-btn svg{width:21px;height:21px}
+.c-send{background:linear-gradient(150deg,var(--accent),var(--accent-2)); color:#fff; border:none}
+.c-rec{background:var(--red); color:#fff; border:none; animation:pulse 1.3s infinite}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(220,38,38,.5)}70%{box-shadow:0 0 0 12px rgba(220,38,38,0)}100%{box-shadow:0 0 0 0 rgba(220,38,38,0)}}
+.attach-chip{display:flex; align-items:center; gap:8px; margin:0 14px 6px; padding:8px 10px;
+  background:var(--card); border:1px solid var(--line); border-radius:12px; font-size:13px}
+.attach-chip img{width:38px;height:38px;object-fit:cover;border-radius:8px}
+.attach-chip .x{margin-inline-start:auto; color:var(--muted); padding:4px}
+
+/* ============ Boards ============ */
+.board{padding:10px 14px calc(var(--safe-bottom) + 20px)}
+.filters{display:flex; gap:7px; overflow-x:auto; padding:4px 0 12px; margin:0 -2px;
+  scrollbar-width:none}
+.filters::-webkit-scrollbar{display:none}
+.chip{flex:none; padding:8px 14px; border-radius:20px; font-size:13px; font-weight:700; color:var(--muted);
+  background:var(--card); border:1px solid var(--line); white-space:nowrap}
+.chip.active{background:var(--accent); color:#fff; border-color:var(--accent)}
+.chip:active{transform:scale(.95)}
+.pcard{background:var(--card); border:1px solid var(--line); border-radius:16px; padding:14px;
+  margin-bottom:10px; box-shadow:var(--shadow); transition:transform .06s}
+.pcard:active{transform:scale(.99)}
+.pcard .pc-top{display:flex; align-items:center; gap:10px}
+.pc-avatar{width:42px;height:42px;border-radius:12px; background:var(--bg-2); display:grid; place-items:center;
+  font-weight:800; color:var(--accent); flex:none; font-size:16px}
+.pc-name{font-weight:800; font-size:16px}
+.pc-sub{font-size:12.5px; color:var(--muted); margin-top:1px}
+.pc-badge{margin-inline-start:auto; text-align:center; flex:none}
+.pc-badge .n{font-weight:800; font-size:18px; line-height:1}
+.pc-badge .l{font-size:10px; color:var(--faint)}
+.pc-tags{display:flex; flex-wrap:wrap; gap:6px; margin-top:11px}
+.tag{font-size:11.5px; font-weight:700; padding:4px 9px; border-radius:8px;
+  background:var(--card-2); color:var(--muted); border:1px solid var(--line)}
+.tag.warn{background:color-mix(in srgb,var(--amber) 14%,transparent); color:var(--amber); border-color:transparent}
+.tag.crit{background:color-mix(in srgb,var(--red) 13%,transparent); color:var(--red); border-color:transparent}
+.tag.ok{background:color-mix(in srgb,var(--green) 13%,transparent); color:var(--green); border-color:transparent}
+
+/* ============ Generic states ============ */
+.state{padding:60px 30px; text-align:center; color:var(--muted); display:flex; flex-direction:column; align-items:center; gap:12px}
+.state svg{width:52px;height:52px; color:var(--faint)}
+.state h3{margin:0; color:var(--text); font-size:17px}
+.state p{margin:0; font-size:14px; max-width:260px}
+.skel{background:var(--card); border:1px solid var(--line); border-radius:16px; height:96px; margin-bottom:10px;
+  position:relative; overflow:hidden}
+.skel::after{content:""; position:absolute; inset:0;
+  background:linear-gradient(90deg,transparent,color-mix(in srgb,var(--muted) 10%,transparent),transparent);
+  transform:translateX(-100%); animation:sh 1.3s infinite}
+@keyframes sh{100%{transform:translateX(100%)}}
+
+/* ============ Profile ============ */
+.prof{padding:18px 16px calc(var(--safe-bottom) + 24px)}
+.prof-head{display:flex; flex-direction:column; align-items:center; text-align:center; gap:8px; padding:10px 0 18px}
+.prof-avatar{width:78px;height:78px;border-radius:24px; background:linear-gradient(150deg,var(--accent),var(--accent-2));
+  display:grid; place-items:center; color:#fff; font-weight:800; font-size:30px; box-shadow:0 10px 26px rgba(255,60,0,.3)}
+.prof-name{font-weight:800; font-size:20px}
+.prof-role{color:var(--muted); font-size:14px}
+.sec-title{font-size:12.5px; font-weight:700; color:var(--faint); text-transform:uppercase; letter-spacing:.5px;
+  margin:20px 4px 8px}
+.list{background:var(--card); border:1px solid var(--line); border-radius:16px; overflow:hidden}
+.row{display:flex; align-items:center; gap:12px; padding:13px 15px; border-bottom:1px solid var(--line-2)}
+.row:last-child{border-bottom:none}
+.row .r-ico{width:34px;height:34px;border-radius:10px; background:var(--card-2); display:grid; place-items:center; color:var(--accent); flex:none}
+.row .r-ico svg{width:18px;height:18px}
+.row .r-label{color:var(--muted); font-size:14px}
+.row .r-val{margin-inline-start:auto; font-weight:700; font-size:14px; text-align:end}
+.pill{font-size:12px; font-weight:800; padding:3px 10px; border-radius:20px}
+.pill.on{background:color-mix(in srgb,var(--green) 15%,transparent); color:var(--green)}
+.pill.off{background:color-mix(in srgb,var(--red) 15%,transparent); color:var(--red)}
+.feat-row{display:flex; align-items:center; gap:10px; padding:11px 15px; border-bottom:1px solid var(--line-2)}
+.feat-row:last-child{border:none}
+.feat-row .fx{width:22px;height:22px;border-radius:7px; display:grid; place-items:center; flex:none; color:#fff}
+.feat-row .fx.y{background:var(--green)} .feat-row .fx.n{background:var(--faint)}
+.feat-row .fx svg{width:14px;height:14px}
+.btn-danger{width:100%; margin-top:22px; padding:14px; border-radius:14px; font-weight:800;
+  color:var(--red); background:var(--card); border:1px solid color-mix(in srgb,var(--red) 30%,transparent)}
+.btn-danger:active{transform:scale(.98)}
+.app-ver{text-align:center; color:var(--faint); font-size:12px; margin-top:16px}
+
+/* ============ Sheet (patient detail) ============ */
+.sheet-back{position:fixed; inset:0; z-index:40; background:rgba(0,0,0,.4); opacity:0; transition:opacity .25s}
+.sheet-back.show{opacity:1}
+.sheet{position:fixed; left:0; right:0; bottom:0; z-index:41; background:var(--bg);
+  border-radius:22px 22px 0 0; max-height:92dvh; display:flex; flex-direction:column;
+  transform:translateY(100%); transition:transform .3s cubic-bezier(.2,.8,.2,1)}
+.sheet.show{transform:translateY(0)}
+.sheet-grab{width:38px;height:5px;border-radius:3px; background:var(--line); margin:9px auto 4px; flex:none}
+.sheet-head{display:flex; align-items:center; gap:10px; padding:6px 16px 12px; border-bottom:1px solid var(--line)}
+.sheet-body{overflow:auto; padding:14px 16px calc(var(--safe-bottom) + 24px)}
+.det-card{background:var(--card); border:1px solid var(--line); border-radius:16px; padding:14px; margin-bottom:12px}
+.det-card h4{margin:0 0 10px; font-size:13px; color:var(--faint); text-transform:uppercase; letter-spacing:.5px; display:flex; align-items:center; gap:7px}
+.vital-grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(96px,1fr)); gap:9px}
+.vital{background:var(--card-2); border:1px solid var(--line); border-radius:12px; padding:10px}
+.vital .vv{font-weight:800; font-size:19px} .vital .vl{font-size:11px; color:var(--muted); margin-top:2px}
+.li{display:flex; gap:9px; padding:9px 0; border-bottom:1px solid var(--line-2); font-size:14.5px}
+.li:last-child{border:none}
+.li .li-dot{width:8px;height:8px;border-radius:50%; margin-top:7px; flex:none; background:var(--accent)}
+.li small{color:var(--muted); display:block; font-size:12px; margin-top:2px}
+.det-empty{color:var(--faint); font-size:13px; padding:2px}
+
+/* iOS add-to-home banner */
+.a2h{position:fixed; left:12px; right:12px; bottom:calc(var(--safe-bottom) + 12px); z-index:60;
+  background:var(--card); border:1px solid var(--line); border-radius:16px; padding:12px 14px;
+  box-shadow:var(--shadow); display:flex; align-items:center; gap:11px; font-size:13.5px}
+.a2h .a2-ic{width:34px;height:34px;border-radius:10px; background:linear-gradient(150deg,var(--accent),var(--accent-2)); display:grid; place-items:center; color:#fff; flex:none}
+.a2h b{font-weight:800}
+.a2h .a2-x{margin-inline-start:auto; color:var(--muted); padding:4px}
+.toast{position:fixed; left:50%; bottom:calc(var(--safe-bottom) + 78px); transform:translateX(-50%) translateY(20px);
+  background:#111827; color:#fff; padding:10px 16px; border-radius:12px; font-size:13.5px; font-weight:600;
+  z-index:90; opacity:0; transition:.25s; max-width:88%; text-align:center}
+.toast.show{opacity:1; transform:translateX(-50%) translateY(0)}
+</style>
+</head>
+<body>
+
+<!-- ================= SPLASH ================= -->
+<div id="splash">
+  <div class="logo-badge" id="splashLogo"></div>
+  <div style="text-align:center">
+    <div class="brand-ar">عون كير</div>
+    <div class="brand-en">Awn Care</div>
+  </div>
+  <svg class="spin" width="26" height="26" viewBox="0 0 24 24" fill="none" style="color:var(--accent);margin-top:4px">
+    <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-opacity=".2" stroke-width="3"/>
+    <path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+  </svg>
+</div>
+
+<!-- ================= LOGIN ================= -->
+<div id="login" class="hidden">
+  <div class="login-hero">
+    <div class="logo-badge" id="loginLogo"></div>
+    <h1>عون كير</h1>
+    <p>مساعد الطبيب النائب — سجّل دخولك بكود الدخول اللي وصلك من الإدارة.</p>
+  </div>
+  <div class="login-card">
+    <div class="field-label">كود الدخول</div>
+    <input id="codeInput" class="code-input" maxlength="6" placeholder="••••••"
+           autocomplete="off" autocapitalize="characters" spellcheck="false" inputmode="text" />
+    <div id="loginErr" class="err-box hidden"></div>
+    <button id="loginBtn" class="btn-primary">
+      <span>دخول</span>
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
+    <div class="login-note">الكود ٦ خانات. لو نسيته أو حسابك موقوف كلّم الإدارة.</div>
+  </div>
+  <div style="height:calc(var(--safe-bottom) + 8px)"></div>
+</div>
+
+<!-- ================= APP ================= -->
+<div id="app" class="hidden">
+  <div class="topbar">
+    <div class="tb-title">
+      <span class="tb-logo" id="tbLogo"></span>
+      <span id="topTitle">الشات</span>
+    </div>
+    <button class="icon-btn" id="refreshBtn" title="تحديث">
+      <svg viewBox="0 0 24 24" fill="none"><path d="M20 12a8 8 0 1 1-2.3-5.6M20 4v4h-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
+    <button class="icon-btn" id="themeBtn" title="الوضع الليلي">
+      <svg viewBox="0 0 24 24" fill="none"><path d="M21 12.8A8.5 8.5 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+    </button>
+  </div>
+
+  <div class="view" id="view"></div>
+
+  <div class="tabbar" id="tabbar">
+    <button class="tab active" data-tab="chat">
+      <svg viewBox="0 0 24 24" fill="none"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.4A8 8 0 1 1 21 12Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+      <span>الشات</span>
+    </button>
+    <button class="tab" data-tab="ed">
+      <svg viewBox="0 0 24 24" fill="none"><path d="M12 21s-7-4.5-9-9a5 5 0 0 1 9-2 5 5 0 0 1 9 2c-2 4.5-9 9-9 9Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M12 8v4M10 10h4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+      <span>الطوارئ</span>
+    </button>
+    <button class="tab" data-tab="round">
+      <svg viewBox="0 0 24 24" fill="none"><path d="M4 21V5a2 2 0 0 1 2-2h9l1 3h3v6H7" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+      <span>الراوند</span>
+    </button>
+    <button class="tab" data-tab="analytics">
+      <svg viewBox="0 0 24 24" fill="none"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      <span>التحليلات</span>
+    </button>
+    <button class="tab" data-tab="profile">
+      <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="2"/><path d="M4 20a8 8 0 0 1 16 0" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      <span>حسابي</span>
+    </button>
+  </div>
+</div>
+
+<!-- sheet + toast mount -->
+<div id="sheetMount"></div>
+<div id="toast" class="toast"></div>
+
+<!-- hidden file inputs -->
+<input type="file" id="cameraInput" accept="image/*" capture="environment" class="hidden" />
+<input type="file" id="galleryInput" accept="image/*" class="hidden" />
+
+<script>
+"use strict";
+/* ================= CONFIG ================= */
+const CFG = {
+  SUPABASE_URL: "https://kaqoozpuvdvernvlmqbk.supabase.co",
+  ANON: "sb_publishable_eDVjcLea7223PDB1seW-kQ_s0K5P-fP",
+  N8N_BASE: "https://n8n-c1bz.srv1841520.hstgr.cloud",
+  BUCKET: "attachments",
+  // ربط الكود بالجهاز (زي التطبيق الأصلي). false = أي جهاز يفتح باللينك يقدر يدخل بالكود.
+  BIND_DEVICE: false,
+  APP_VERSION: "1.0.0 (web)"
+};
+
+/* ================= STATE ================= */
+const S = {
+  code: null,
+  staff: null,          // resolve_staff result
+  tab: "chat",
+  chatBot: "ed",        // ed | round
+  board: { ed:{filter:"all"}, round:{filter:"all"} },
+  poll: null,
+};
+
+/* ================= tiny helpers ================= */
+const $ = (s,r=document)=>r.querySelector(s);
+const el = (id)=>document.getElementById(id);
+const esc = (s)=> (s==null?"":String(s)).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const store = {
+  get:(k)=>{ try{return localStorage.getItem("awncare_"+k)}catch{return null} },
+  set:(k,v)=>{ try{localStorage.setItem("awncare_"+k,v)}catch{} },
+  del:(k)=>{ try{localStorage.removeItem("awncare_"+k)}catch{} },
+};
+function deviceId(){
+  let d = store.get("device");
+  if(!d){ d = (crypto.randomUUID?crypto.randomUUID():"d"+Date.now()+Math.random().toString(16).slice(2)); store.set("device",d); }
+  return d;
+}
+let toastT;
+function toast(msg){
+  const t = el("toast"); t.textContent = msg; t.classList.add("show");
+  clearTimeout(toastT); toastT = setTimeout(()=>t.classList.remove("show"), 2600);
+}
+function timeStr(iso){
+  if(!iso) return "";
+  const d = new Date(iso); if(isNaN(d)) return "";
+  return d.toLocaleTimeString("ar-EG",{hour:"2-digit",minute:"2-digit"});
+}
+function initials(name){
+  if(!name) return "؟";
+  const p = String(name).trim().split(/\s+/);
+  return (p[0]?.[0]||"") + (p[1]?.[0]||"");
+}
+function age(birthYear){ if(!birthYear) return null; return (new Date().getFullYear() - birthYear); }
+function sexAr(s){ return s==="m"?"ذكر":(s==="f"?"أنثى":""); }
+
+/* ================= brand icon (canvas -> PNG for iOS home screen) ================= */
+function brandSVG(size){
+  return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none">
+    <path d="M6 3v5a4 4 0 0 0 8 0V3" stroke="#fff" stroke-width="2" stroke-linecap="round"/>
+    <circle cx="18.5" cy="14" r="2.4" stroke="#fff" stroke-width="2"/>
+    <path d="M10 12v2a6 6 0 0 0 6 6h.5" stroke="#fff" stroke-width="2" stroke-linecap="round"/>
+    <circle cx="6" cy="3" r="1.4" fill="#fff"/><circle cx="14" cy="3" r="1.4" fill="#fff"/>
+  </svg>`;
+}
+function paintLogos(){
+  const sv = brandSVG(46), lv = brandSVG(40), tv = brandSVG(17);
+  el("splashLogo").innerHTML = sv; el("loginLogo").innerHTML = lv; el("tbLogo").innerHTML = tv;
+}
+function makeTouchIcon(){
+  try{
+    const c = document.createElement("canvas"); c.width=c.height=180; const x=c.getContext("2d");
+    const g = x.createLinearGradient(0,0,180,180); g.addColorStop(0,"#ff3c00"); g.addColorStop(1,"#ff7a3c");
+    x.fillStyle=g; x.beginPath(); (x.roundRect?x.roundRect(0,0,180,180,40):x.rect(0,0,180,180)); x.fill();
+    x.strokeStyle="#fff"; x.lineWidth=11; x.lineCap="round";
+    // stethoscope-ish
+    x.beginPath(); x.arc(58,55,7,0,7); x.stroke();
+    x.beginPath(); x.arc(100,55,7,0,7); x.stroke();
+    x.beginPath(); x.moveTo(58,60); x.lineTo(58,95); x.arc(79,95,21,Math.PI,0,true); x.lineTo(100,60); x.stroke();
+    x.beginPath(); x.moveTo(79,116); x.lineTo(79,132); x.stroke();
+    x.beginPath(); x.arc(120,132,14,0,7); x.stroke();
+    x.beginPath(); x.moveTo(79,132); x.quadraticCurveTo(79,132,107,132); x.stroke();
+    const url = c.toDataURL("image/png");
+    el("touchIcon").href = url;
+    el("favIcon").href = url;
+  }catch(e){}
+}
+
+/* ================= API ================= */
+async function rpc(fn, params){
+  const r = await fetch(`${CFG.SUPABASE_URL}/rest/v1/rpc/${fn}`, {
+    method:"POST",
+    headers:{ "apikey":CFG.ANON, "Authorization":"Bearer "+CFG.ANON, "Content-Type":"application/json" },
+    body: JSON.stringify(params||{})
+  });
+  const txt = await r.text();
+  let data; try{ data = JSON.parse(txt); }catch{ data = txt; }
+  if(!r.ok){
+    const m = (data && (data.message||data.error||data.hint)) || txt || ("HTTP "+r.status);
+    throw new Error(cleanErr(m));
+  }
+  return data;
+}
+function cleanErr(m){
+  m = String(m||"");
+  // رسائل الباك-إند بتيجي بصيغة AWN_CODE: نص عربي — نظّفها
+  const map = {
+    "AWN_DEVICE_MISMATCH":"الكود ده مسجّل على جهاز تاني. كلّم الإدارة.",
+    "AWN_ENCOUNTER_NOT_FOUND":"الحالة مش موجودة.",
+    "AWN_STAFF_NOT_FOUND":"كود الدخول غير صحيح.",
+    "AWN_STAFF_PENDING":"حسابك تحت المراجعة — كلّم الإدارة.",
+    "AWN_STAFF_SUSPENDED":"حسابك موقوف — كلّم الإدارة.",
+    "AWN_NO_PLAN":"مفيش باقة مربوطة بحسابك — كلّم الإدارة.",
+    "AWN_BOT_NOT_ENABLED":"وحدة الدخول مش مفعّلة في باقتك — كلّم الإدارة.",
+  };
+  for(const k in map){ if(m.includes(k)) return map[k]; }
+  const idx = m.indexOf(":"); // شيل البادئة الكودية
+  if(/^AWN_/.test(m) && idx>0) return m.slice(idx+1).trim();
+  if(/not.*unique|function.*does not exist|permission denied/i.test(m)) return "خطأ في الخدمة. حاول تاني أو كلّم الإدارة.";
+  return m;
+}
+async function sendToBot(bot, payload){
+  const r = await fetch(`${CFG.N8N_BASE}/webhook/${bot}-mobile`, {
+    method:"POST", headers:{ "Content-Type":"application/json" },
+    body: JSON.stringify(Object.assign({ chat_id:S.code, bot_key:bot }, payload))
+  });
+  const txt = await r.text();
+  let data; try{ data = JSON.parse(txt); }catch{ data = { reply_text: txt }; }
+  if(!r.ok) throw new Error("تعذّر إرسال الرسالة (" + r.status + ").");
+  // n8n ممكن يرجّع array أو object
+  if(Array.isArray(data)) data = data[0]||{};
+  return { reply_text: data.reply_text || data.output || data.reply || "تمام ✅", attachments: data.attachments || [] };
+}
+async function uploadFile(file, kind){
+  const ext = (file.name && file.name.includes(".")) ? file.name.split(".").pop()
+            : (file.type.split("/")[1]||"bin").replace("jpeg","jpg");
+  const path = `mobile/${S.code}/${kind}/${Date.now()}-${Math.random().toString(16).slice(2,8)}.${ext}`;
+  const r = await fetch(`${CFG.SUPABASE_URL}/storage/v1/object/${CFG.BUCKET}/${encodeURI(path)}`, {
+    method:"POST",
+    headers:{ "apikey":CFG.ANON, "Authorization":"Bearer "+CFG.ANON,
+              "Content-Type":file.type||"application/octet-stream", "x-upsert":"true" },
+    body: file
+  });
+  if(!r.ok){ const t=await r.text(); throw new Error("فشل رفع الملف: "+cleanErr(t)); }
+  return path;
+}
+const signedCache = {};
+async function signedUrl(path){
+  if(!path) return "";
+  if(signedCache[path]) return signedCache[path];
+  try{
+    const r = await fetch(`${CFG.SUPABASE_URL}/storage/v1/object/sign/${CFG.BUCKET}/${encodeURI(path)}`, {
+      method:"POST", headers:{ "apikey":CFG.ANON, "Authorization":"Bearer "+CFG.ANON, "Content-Type":"application/json" },
+      body: JSON.stringify({ expiresIn:3600 })
+    });
+    if(!r.ok) return "";
+    const j = await r.json();
+    const u = `${CFG.SUPABASE_URL}/storage/v1${j.signedURL||j.signedUrl||""}`;
+    signedCache[path]=u; return u;
+  }catch{ return ""; }
+}
+
+/* ================= LOGIN ================= */
+async function doLogin(code){
+  const btn = el("loginBtn"); const errBox = el("loginErr");
+  errBox.classList.add("hidden");
+  code = (code||"").trim().toUpperCase();
+  if(code.length < 4){ showLoginErr("اكتب كود الدخول الصحيح."); return; }
+  btn.disabled = true;
+  btn.innerHTML = '<svg class="spin" width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="#fff" stroke-opacity=".3" stroke-width="3"/><path d="M21 12a9 9 0 0 0-9-9" stroke="#fff" stroke-width="3" stroke-linecap="round"/></svg><span>جاري الدخول…</span>';
+  try{
+    const params = { p_platform:"mobile", p_bot_key:"ed", p_chat_id:code };
+    if(CFG.BIND_DEVICE) params.p_device_id = deviceId();
+    const staff = await rpc("app_resolve_staff", params);
+    S.code = code; S.staff = staff;
+    store.set("code", code);
+    enterApp();
+  }catch(e){
+    showLoginErr(cleanErr(e.message || "تعذّر الدخول. حاول تاني."));
+  }finally{
+    btn.disabled=false;
+    btn.innerHTML='<span>دخول</span><svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  }
+}
+function showLoginErr(m){ const b=el("loginErr"); b.textContent=m; b.classList.remove("hidden"); }
+
+function enterApp(){
+  el("splash").classList.add("hidden");
+  el("login").classList.add("hidden");
+  el("app").classList.remove("hidden");
+  setTab("chat");
+  maybeShowA2H();
+}
+function logout(){
+  if(S.poll) clearInterval(S.poll);
+  store.del("code"); S.code=null; S.staff=null;
+  el("app").classList.add("hidden");
+  el("login").classList.remove("hidden");
+  el("codeInput").value="";
+}
+
+/* ================= TABS ================= */
+const TITLES = { chat:"الشات", ed:"الطوارئ", round:"الراوند", analytics:"التحليلات", profile:"حسابي" };
+function setTab(tab){
+  S.tab = tab;
+  el("topTitle").textContent = TITLES[tab];
+  document.querySelectorAll(".tab").forEach(t=>t.classList.toggle("active", t.dataset.tab===tab));
+  el("refreshBtn").style.display = (tab==="ed"||tab==="round"||tab==="chat") ? "grid" : "none";
+  if(S.poll){ clearInterval(S.poll); S.poll=null; }
+  if(tab==="chat") renderChat();
+  else if(tab==="ed") renderBoard("ed");
+  else if(tab==="round") renderBoard("round");
+  else if(tab==="analytics") renderAnalytics();
+  else if(tab==="profile") renderProfile();
+}
+
+/* ================= CHAT ================= */
+function renderChat(){
+  const v = el("view");
+  v.innerHTML = `
+  <div class="chat-wrap">
+    <div class="seg">
+      <div class="seg-track">
+        <button class="seg-btn ${S.chatBot==='ed'?'active':''}" data-bot="ed">
+          <span class="dot" style="background:var(--accent)"></span> الطوارئ</button>
+        <button class="seg-btn ${S.chatBot==='round'?'active':''}" data-bot="round">
+          <span class="dot" style="background:var(--blue)"></span> الراوند</button>
+      </div>
+    </div>
+    <div class="thread" id="thread"></div>
+    <div id="attachChip"></div>
+    <div class="composer">
+      <button class="c-btn" id="camBtn" title="كاميرا">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M4 8h3l1.5-2h7L17 8h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1Z" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="13" r="3.2" stroke="currentColor" stroke-width="1.8"/></svg>
+      </button>
+      <textarea class="c-input" id="chatInput" rows="1" placeholder="اكتب رسالتك…"></textarea>
+      <button class="c-btn" id="micBtn" title="تسجيل صوتي">
+        <svg viewBox="0 0 24 24" fill="none"><rect x="9" y="3" width="6" height="11" rx="3" stroke="currentColor" stroke-width="1.8"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+      </button>
+      <button class="c-btn c-send" id="sendBtn" title="إرسال">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M4 12l16-8-6 16-3-6-7-2Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" fill="currentColor" fill-opacity=".15"/></svg>
+      </button>
+    </div>
+  </div>`;
+  v.querySelectorAll(".seg-btn").forEach(b=>b.onclick=()=>{ S.chatBot=b.dataset.bot; renderChat(); });
+  const input = el("chatInput");
+  input.oninput = ()=>{ input.style.height="auto"; input.style.height=Math.min(input.scrollHeight,120)+"px"; };
+  input.onkeydown = (e)=>{ if(e.key==="Enter" && !e.shiftKey){ e.preventDefault(); onSend(); } };
+  el("sendBtn").onclick = onSend;
+  el("micBtn").onclick = toggleRecord;
+  el("camBtn").onclick = ()=>el("cameraInput").click();
+  loadHistory();
+}
+function threadEl(){ return el("thread"); }
+function scrollThread(){ const t=threadEl(); if(t) t.scrollTop = t.scrollHeight + 999; }
+
+async function loadHistory(){
+  const t = threadEl(); if(!t) return;
+  t.innerHTML = `<div class="state" style="padding:40px 20px"><svg class="spin" width="26" height="26" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-opacity=".2" stroke-width="3"/><path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg></div>`;
+  try{
+    const rows = await rpc("app_chat_history", { p_platform:"mobile", p_bot_key:S.chatBot, p_chat_id:S.code, p_limit:60 });
+    if(threadEl()!==t) return; // بدّل التاب
+    t.innerHTML = "";
+    if(!rows || !rows.length){
+      t.innerHTML = `<div class="state" style="padding:50px 24px">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.4A8 8 0 1 1 21 12Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+        <h3>ابدأ محادثتك</h3><p>اكتب، أو سجّل صوت، أو صوّر — والمساعد هيرد ويسجّل كل حاجة.</p></div>`;
+      return;
+    }
+    for(const row of rows){ appendMessageFromHistory(row.message); }
+    scrollThread();
+  }catch(e){
+    if(threadEl()!==t) return;
+    t.innerHTML = `<div class="state" style="padding:50px 24px"><h3>تعذّر تحميل المحادثة</h3><p>${esc(e.message)}</p></div>`;
+  }
+}
+function appendMessageFromHistory(m){
+  if(!m) return;
+  const type = m.type || m.role || (m.data && m.data.type);
+  const content = (m.data && m.data.content) != null ? m.data.content : (m.content||"");
+  if(type==="human" || type==="user"){ addBubble("me", content); }
+  else if(type==="ai" || type==="assistant"){ if(String(content).trim()) addBubble("ai", content); }
+}
+function addBubble(side, text, atts, ts){
+  const t = threadEl(); if(!t) return null;
+  const b = document.createElement("div");
+  b.className = "bubble " + (side==="me"?"b-me":"b-ai");
+  b.innerHTML = esc(text) + (ts?`<span class="time">${esc(ts)}</span>`:"");
+  t.appendChild(b);
+  if(atts && atts.length){ renderBubbleAtts(b, atts); }
+  scrollThread();
+  return b;
+}
+async function renderBubbleAtts(bubble, atts){
+  const wrap = document.createElement("div"); wrap.className="b-att"; bubble.appendChild(wrap);
+  for(const a of atts){
+    const path = a.storage_path || a.path; if(!path) continue;
+    const img = document.createElement("img"); img.alt = a.caption||"صورة"; wrap.appendChild(img);
+    signedUrl(path).then(u=>{ if(u) img.src=u; });
+    if(a.caption){ const cap=document.createElement("div"); cap.className="att-cap"; cap.textContent=a.caption; bubble.appendChild(cap); }
+  }
+}
+function showTyping(){
+  const t=threadEl(); if(!t) return null;
+  const d=document.createElement("div"); d.className="typing"; d.innerHTML="<i></i><i></i><i></i>";
+  t.appendChild(d); scrollThread(); return d;
+}
+
+let pendingPhoto = null; // {file, previewUrl}
+async function onSend(){
+  const input = el("chatInput");
+  const text = (input.value||"").trim();
+  if(pendingPhoto){ return sendPhoto(text); }
+  if(!text) return;
+  input.value=""; input.style.height="auto";
+  addBubble("me", text, null, timeStr(new Date().toISOString()));
+  const typing = showTyping();
+  try{
+    const res = await sendToBot(S.chatBot, { type:"text", text });
+    typing?.remove();
+    addBubble("ai", res.reply_text, res.attachments, timeStr(new Date().toISOString()));
+  }catch(e){ typing?.remove(); addBubble("ai", "⚠️ " + e.message); }
+}
+async function sendPhoto(caption){
+  const file = pendingPhoto.file; clearPendingPhoto();
+  const input = el("chatInput"); input.value=""; input.style.height="auto";
+  const meB = addBubble("me", caption||"📷 صورة", null, timeStr(new Date().toISOString()));
+  const localUrl = URL.createObjectURL(file);
+  renderBubbleAtts(meB, [{ storage_path:null }]);
+  const imgEl = meB.querySelector(".b-att img"); if(imgEl) imgEl.src = localUrl;
+  const typing = showTyping();
+  try{
+    const path = await uploadFile(file, "photo");
+    const res = await sendToBot(S.chatBot, { type:"photo", photo_storage_path:path, caption:caption||"" });
+    typing?.remove();
+    addBubble("ai", res.reply_text, res.attachments, timeStr(new Date().toISOString()));
+  }catch(e){ typing?.remove(); addBubble("ai","⚠️ "+e.message); }
+}
+function setPendingPhoto(file){
+  pendingPhoto = { file };
+  const url = URL.createObjectURL(file);
+  el("attachChip").innerHTML = `<div class="attach-chip">
+    <img src="${url}" alt=""><div>صورة جاهزة — اكتب تعليق (اختياري) واضغط إرسال</div>
+    <button class="x" id="rmPhoto">✕</button></div>`;
+  el("rmPhoto").onclick = clearPendingPhoto;
+  el("chatInput")?.focus();
+}
+function clearPendingPhoto(){ pendingPhoto=null; const c=el("attachChip"); if(c) c.innerHTML=""; }
+
+/* ---- voice recording ---- */
+let mediaRec=null, recChunks=[], recStream=null;
+async function toggleRecord(){
+  const mic = el("micBtn");
+  if(mediaRec && mediaRec.state==="recording"){ mediaRec.stop(); return; }
+  if(!navigator.mediaDevices || !window.MediaRecorder){ toast("جهازك مش بيدعم التسجيل الصوتي في المتصفح."); return; }
+  try{
+    recStream = await navigator.mediaDevices.getUserMedia({ audio:true });
+  }catch(e){ toast("لازم تسمح بالميكروفون."); return; }
+  recChunks=[];
+  let mime = "audio/webm";
+  if(window.MediaRecorder.isTypeSupported){
+    if(MediaRecorder.isTypeSupported("audio/mp4")) mime="audio/mp4";
+    else if(MediaRecorder.isTypeSupported("audio/webm;codecs=opus")) mime="audio/webm;codecs=opus";
+    else if(MediaRecorder.isTypeSupported("audio/webm")) mime="audio/webm";
+    else mime="";
+  }
+  try{ mediaRec = mime? new MediaRecorder(recStream,{mimeType:mime}) : new MediaRecorder(recStream); }
+  catch(e){ mediaRec = new MediaRecorder(recStream); }
+  mediaRec.ondataavailable = (e)=>{ if(e.data && e.data.size) recChunks.push(e.data); };
+  mediaRec.onstop = onRecStop;
+  mediaRec.start();
+  mic.classList.add("c-rec");
+  mic.innerHTML = '<svg viewBox="0 0 24 24" fill="none"><rect x="7" y="7" width="10" height="10" rx="2" fill="currentColor"/></svg>';
+  toast("جاري التسجيل… اضغط تاني للإيقاف والإرسال");
+}
+async function onRecStop(){
+  const mic = el("micBtn");
+  if(mic){ mic.classList.remove("c-rec");
+    mic.innerHTML='<svg viewBox="0 0 24 24" fill="none"><rect x="9" y="3" width="6" height="11" rx="3" stroke="currentColor" stroke-width="1.8"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>'; }
+  if(recStream){ recStream.getTracks().forEach(t=>t.stop()); recStream=null; }
+  const type = (mediaRec && mediaRec.mimeType) || "audio/webm";
+  const blob = new Blob(recChunks, { type });
+  if(!blob.size){ return; }
+  const ext = type.includes("mp4")?"m4a":(type.includes("webm")?"webm":"ogg");
+  const file = new File([blob], "voice."+ext, { type });
+  addBubble("me", "🎤 رسالة صوتية", null, timeStr(new Date().toISOString()));
+  const typing = showTyping();
+  try{
+    const path = await uploadFile(file, "voice");
+    const res = await sendToBot(S.chatBot, { type:"voice", audio_storage_path:path });
+    typing?.remove();
+    addBubble("ai", res.reply_text, res.attachments, timeStr(new Date().toISOString()));
+  }catch(e){ typing?.remove(); addBubble("ai","⚠️ "+e.message); }
+}
+
+/* ================= BOARDS (ED / Round) ================= */
+const FILTERS = [
+  { k:"all", label:"الكل" },
+  { k:"mine", label:"حالاتي" },
+  { k:"pending_orders", label:"طلبات معلّقة" },
+  { k:"overdue_commitments", label:"التزامات متأخرة" },
+  { k:"vitals_stale", label:"فيتالز قديمة" },
+  { k:"open_complications", label:"مضاعفات مفتوحة" },
+];
+function renderBoard(bot){
+  const cur = S.board[bot].filter;
+  const v = el("view");
+  v.innerHTML = `<div class="board">
+    <div class="filters" id="filters">
+      ${FILTERS.map(f=>`<button class="chip ${f.k===cur?'active':''}" data-f="${f.k}">${f.label}</button>`).join("")}
+    </div>
+    <div id="boardList">
+      <div class="skel"></div><div class="skel"></div><div class="skel"></div>
+    </div>
+  </div>`;
+  v.querySelectorAll(".chip").forEach(c=>c.onclick=()=>{ S.board[bot].filter=c.dataset.f; renderBoard(bot); });
+  loadBoard(bot);
+  if(S.poll) clearInterval(S.poll);
+  S.poll = setInterval(()=>{ if(S.tab===bot) loadBoard(bot, true); }, 25000);
+}
+async function loadBoard(bot, silent){
+  const listId = "boardList"; const list = el(listId);
+  if(!list) return;
+  try{
+    const res = await rpc("app_encounter_list", {
+      p_platform:"mobile", p_bot_key:bot, p_chat_id:S.code,
+      p_filter:S.board[bot].filter, p_category:null
+    });
+    if(el(listId)!==list) return;
+    const rows = (res && res.results) || [];
+    if(!rows.length){
+      list.innerHTML = `<div class="state"><svg viewBox="0 0 24 24" fill="none"><path d="M9 11l3 3 8-8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M21 12a9 9 0 1 1-6.2-8.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        <h3>مفيش حالات هنا</h3><p>${bot==='ed'?'مفيش حالات في الطوارئ':'مفيش مرضى في الراوند'} بالفلتر ده حاليًا.</p></div>`;
+      return;
+    }
+    list.innerHTML = rows.map(r=>cardHTML(r,bot)).join("");
+    list.querySelectorAll(".pcard").forEach(c=>c.onclick=()=>openPatient(bot, c.dataset.enc));
+  }catch(e){
+    if(el(listId)!==list) return;
+    if(!silent) list.innerHTML = `<div class="state"><h3>تعذّر تحميل البورد</h3><p>${esc(e.message)}</p></div>`;
+  }
+}
+function cardHTML(r, bot){
+  const tags=[];
+  const d = r.detail;
+  if(S.board[bot].filter==="pending_orders" && Array.isArray(d)) tags.push(`<span class="tag warn">${d.length} طلب معلّق</span>`);
+  if(S.board[bot].filter==="overdue_commitments" && Array.isArray(d)) tags.push(`<span class="tag crit">${d.length} التزام متأخر</span>`);
+  if(S.board[bot].filter==="open_complications" && Array.isArray(d)) tags.push(`<span class="tag crit">${d.length} مضاعفة</span>`);
+  if(r.unit) tags.push(`<span class="tag">${esc(r.unit)}</span>`);
+  if(r.attending) tags.push(`<span class="tag">${esc(r.attending)}</span>`);
+  const ticket = r.handle ? String(r.handle).replace(/^t:/,"") : (r.mrn||"");
+  return `<div class="pcard" data-enc="${esc(r.encounter_id)}">
+    <div class="pc-top">
+      <div class="pc-avatar">${esc(initials(r.patient))}</div>
+      <div style="min-width:0">
+        <div class="pc-name">${esc(r.patient||"—")}</div>
+        <div class="pc-sub">تذكرة ${esc(ticket||"—")}${r.mrn?" · "+esc(r.mrn):""}</div>
+      </div>
+      <div class="pc-badge"><div class="n">${r.days_open!=null?r.days_open:"–"}</div><div class="l">يوم مفتوح</div></div>
+    </div>
+    ${tags.length?`<div class="pc-tags">${tags.join("")}</div>`:""}
+  </div>`;
+}
+
+/* ================= PATIENT DETAIL SHEET ================= */
+function openSheet(inner){
+  const mount = el("sheetMount");
+  mount.innerHTML = `<div class="sheet-back" id="sheetBack"></div>
+    <div class="sheet" id="sheet"><div class="sheet-grab"></div>${inner}</div>`;
+  requestAnimationFrame(()=>{ el("sheetBack").classList.add("show"); el("sheet").classList.add("show"); });
+  el("sheetBack").onclick = closeSheet;
+}
+function closeSheet(){
+  const b=el("sheetBack"), s=el("sheet"); if(!s) return;
+  b.classList.remove("show"); s.classList.remove("show");
+  setTimeout(()=>{ el("sheetMount").innerHTML=""; }, 300);
+}
+async function openPatient(bot, enc){
+  openSheet(`<div class="sheet-head">
+      <button class="icon-btn" onclick="closeSheet()"><svg viewBox="0 0 24 24" fill="none"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
+      <b style="font-size:17px">ملف المريض</b></div>
+    <div class="sheet-body" id="sheetBody">
+      <div class="skel" style="height:120px"></div><div class="skel" style="height:120px"></div></div>`);
+  try{
+    const data = await rpc("app_patient_summary", { p_platform:"mobile", p_bot_key:bot, p_chat_id:S.code, p_encounter_id:enc });
+    const body = el("sheetBody"); if(body) body.innerHTML = patientHTML(data);
+  }catch(e){
+    const body = el("sheetBody"); if(body) body.innerHTML = `<div class="state"><h3>تعذّر فتح الملف</h3><p>${esc(e.message)}</p></div>`;
+  }
+}
+function patientHTML(d){
+  const p=d.patient||{}, e=d.encounter||{};
+  const a = age(p.birth_year);
+  const meta=[]; if(sexAr(p.sex)) meta.push(sexAr(p.sex)); if(a) meta.push(a+" سنة"); if(p.mrn) meta.push(p.mrn);
+  const ticket = e.handle ? String(e.handle).replace(/^t:/,"") : "";
+  const sec=(title,ico,items)=> `<div class="det-card"><h4>${ico} ${title}</h4>${items}</div>`;
+  const iconV=`<svg viewBox="0 0 24 24" width="14" height="14" fill="none" style="color:var(--accent)"><path d="M3 12h4l2 5 4-12 2 7h6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+  const iconO=`<svg viewBox="0 0 24 24" width="14" height="14" fill="none" style="color:var(--blue)"><path d="M9 5h6M9 5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2M9 11h6M9 15h4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`;
+  const iconM=`<svg viewBox="0 0 24 24" width="14" height="14" fill="none" style="color:var(--teal)"><rect x="3" y="8" width="13" height="8" rx="4" stroke="currentColor" stroke-width="1.8"/><path d="M9.5 8v8" stroke="currentColor" stroke-width="1.8"/></svg>`;
+  const iconN=`<svg viewBox="0 0 24 24" width="14" height="14" fill="none" style="color:var(--amber)"><path d="M4 5h16M4 10h16M4 15h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`;
+
+  // vitals
+  const vitals=(d.latest_vitals||[]);
+  const vitalsHTML = vitals.length ? `<div class="vital-grid">${vitals.map(v=>`
+     <div class="vital"><div class="vv">${esc(v.value)}${v.unit?` <span style="font-size:12px;color:var(--muted)">${esc(v.unit)}</span>`:""}</div>
+       <div class="vl">${esc(metricAr(v.metric))}</div></div>`).join("")}</div>` : `<div class="det-empty">مفيش فيتالز مسجّلة.</div>`;
+
+  const orders=(d.open_orders||[]).filter(o=>o.status==='pending');
+  const ordersHTML = orders.length ? orders.map(o=>`<div class="li"><span class="li-dot" style="background:var(--blue)"></span>
+     <div><b>${esc(o.name)}</b><small>${esc(o.category||"")}${o.ordered_by?" · طلبها "+esc(o.ordered_by):""}</small></div></div>`).join("")
+     : `<div class="det-empty">مفيش طلبات معلّقة.</div>`;
+
+  const meds=(d.active_medications||[]);
+  const medsHTML = meds.length ? meds.map(m=>`<div class="li"><span class="li-dot" style="background:var(--teal)"></span>
+     <div><b>${esc(m.name)}</b><small>${[m.dose,m.route,m.frequency].filter(Boolean).map(esc).join(" · ")}</small></div></div>`).join("")
+     : `<div class="det-empty">مفيش أدوية فعّالة.</div>`;
+
+  const comps=(d.open_complications||[]);
+  const compsHTML = comps.length ? sec("مضاعفات مفتوحة",`<span style="color:var(--red)">⚠️</span>`,
+     comps.map(x=>`<div class="li"><span class="li-dot" style="background:var(--red)"></span><div>${esc(x.description)}</div></div>`).join("")) : "";
+
+  const commits=(d.open_commitments||[]);
+  const commitsHTML = commits.length ? sec("التزامات مفتوحة",iconN,
+     commits.map(k=>`<div class="li"><span class="li-dot" style="background:${k.overdue?'var(--red)':'var(--amber)'}"></span>
+       <div>${esc(k.text)}<small>${k.owner?esc(k.owner):""}${k.overdue?' · <span style="color:var(--red)">متأخر</span>':""}</small></div></div>`).join("")) : "";
+
+  const notes=(d.recent_notes||[]);
+  const notesHTML = notes.length ? sec("آخر الملاحظات",iconN,
+     notes.map(n=>`<div class="li"><span class="li-dot"></span><div><b>${esc(kindAr(n.kind))}</b><small>${esc(n.body)}</small></div></div>`).join("")) : "";
+
+  return `
+  <div class="prof-head" style="padding:4px 0 14px">
+    <div class="prof-avatar" style="width:64px;height:64px;font-size:24px;border-radius:20px">${esc(initials(p.name))}</div>
+    <div class="prof-name" style="font-size:19px">${esc(p.name||"—")}</div>
+    <div class="prof-role">${meta.map(esc).join(" · ")}</div>
+    <div class="pc-tags" style="justify-content:center;margin-top:8px">
+      ${ticket?`<span class="tag">تذكرة ${esc(ticket)}</span>`:""}
+      ${e.unit?`<span class="tag">${esc(e.unit)}</span>`:""}
+      ${e.attending?`<span class="tag">${esc(e.attending)}</span>`:""}
+      ${e.status?`<span class="tag ${e.status==='active'?'ok':''}">${e.status==='active'?'نشط':esc(e.status)}</span>`:""}
+    </div>
+  </div>
+  ${(p.allergies&&p.allergies.length)?`<div class="det-card" style="border-color:color-mix(in srgb,var(--red) 30%,transparent)"><h4 style="color:var(--red)">⚠️ حساسية</h4><div style="font-weight:700">${p.allergies.map(esc).join("، ")}</div></div>`:""}
+  ${sec("أحدث الفيتالز",iconV,vitalsHTML)}
+  ${sec("طلبات معلّقة",iconO,ordersHTML)}
+  ${sec("أدوية فعّالة",iconM,medsHTML)}
+  ${compsHTML}
+  ${commitsHTML}
+  ${notesHTML}
+  ${(d.attachments&&d.attachments.length)?attachmentsHTML(d.attachments):""}
+  `;
+}
+function attachmentsHTML(atts){
+  const id="attWrap"+Math.random().toString(16).slice(2,6);
+  setTimeout(async()=>{
+    const w=document.getElementById(id); if(!w) return;
+    for(const a of atts){ const u=await signedUrl(a.storage_path); const img=w.querySelector(`img[data-p="${cssq(a.storage_path)}"]`); if(img&&u) img.src=u; }
+  },30);
+  return `<div class="det-card"><h4>📎 مرفقات (${atts.length})</h4>
+    <div id="${id}" class="b-att">${atts.map(a=>`<img data-p="${esc(a.storage_path)}" alt="${esc(a.caption||'')}">`).join("")}</div></div>`;
+}
+function cssq(s){ return String(s||"").replace(/"/g,'\\"'); }
+function metricAr(m){ return ({temp:"الحرارة",hr:"النبض",rr:"التنفّس",spo2:"الأكسجين",sbp:"ضغط انقباضي",dbp:"ضغط انبساطي",bp:"الضغط",glucose:"السكر",gcs:"GCS",pain:"الألم",weight:"الوزن"})[m]||m; }
+function kindAr(k){ return ({complaint:"الشكوى",history:"التاريخ",exam:"الفحص",diagnosis:"التشخيص",health_education:"توعية",note:"ملاحظة"})[k]||k; }
+
+/* ================= ANALYTICS ================= */
+function renderAnalytics(){
+  el("view").innerHTML = `<div class="state" style="padding:90px 30px">
+    <div class="logo-badge" style="width:66px;height:66px;border-radius:20px;opacity:.9">${brandSVG(36)}</div>
+    <h3 style="margin-top:6px">التحليلات — قريبًا</h3>
+    <p>متوسط مدة البقاء، زمن استجابة الطلبات، معدل المضاعفات، وحمل العمل لكل طبيب — كلها جايّة هنا قريب.</p>
+  </div>`;
+}
+
+/* ================= PROFILE ================= */
+function renderProfile(){
+  const s = S.staff||{};
+  const feats = Array.isArray(s.features) ? s.features : [];
+  // خريطة أسماء المزايا المعروفة (المفاتيح الحقيقية من جدول features)
+  const FEAT_AR = {
+    ed_module:"وحدة الطوارئ", round_module:"وحدة الراوند", clinic_module:"وحدة العيادة",
+    analytics_module:"التحليلات", analytics:"التحليلات",
+    voice:"الإدخال الصوتي", photos:"المرفقات والصور", health_education:"التوعية الصحية"
+  };
+  const featLabel=(k)=> FEAT_AR[k] || String(k).replace(/_module$/,"").replace(/_/g," ");
+  const iconRow=(ico,label,val,extra="")=>`<div class="row"><div class="r-ico">${ico}</div>
+     <div class="r-label">${label}</div><div class="r-val">${val}${extra}</div></div>`;
+  const I = {
+    id:`<svg viewBox="0 0 24 24" fill="none"><rect x="3" y="5" width="18" height="14" rx="2" stroke="currentColor" stroke-width="1.8"/><circle cx="8" cy="11" r="2" stroke="currentColor" stroke-width="1.6"/><path d="M13 10h5M13 13h4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>`,
+    star:`<svg viewBox="0 0 24 24" fill="none"><path d="M12 3l2.5 5 5.5.8-4 3.9.9 5.5L12 15.6 7.1 18.2l.9-5.5-4-3.9L9.5 8 12 3Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>`,
+    hosp:`<svg viewBox="0 0 24 24" fill="none"><path d="M4 21V7l8-4 8 4v14" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M12 8v6M9 11h6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`,
+    plan:`<svg viewBox="0 0 24 24" fill="none"><rect x="3" y="6" width="18" height="12" rx="2" stroke="currentColor" stroke-width="1.8"/><path d="M3 10h18" stroke="currentColor" stroke-width="1.8"/></svg>`,
+    key:`<svg viewBox="0 0 24 24" fill="none"><circle cx="8" cy="8" r="4" stroke="currentColor" stroke-width="1.8"/><path d="M11 11l8 8M16 16l2-2M19 19l1.5-1.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`,
+    check:`<svg viewBox="0 0 24 24" fill="none"><path d="M5 12l4 4 10-10" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+    x:`<svg viewBox="0 0 24 24" fill="none"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>`
+  };
+  const planPill = s.plan_active
+     ? `<span class="pill on">نشط</span>` : `<span class="pill off">موقوف</span>`;
+
+  el("view").innerHTML = `<div class="prof">
+    <div class="prof-head">
+      <div class="prof-avatar">${esc(initials(s.full_name))}</div>
+      <div class="prof-name">${esc(s.full_name||"طبيب")}</div>
+      <div class="prof-role">${esc(s.specialty||roleAr(s.role))}</div>
+    </div>
+
+    <div class="sec-title">بيانات الطبيب</div>
+    <div class="list">
+      ${iconRow(I.id,"الاسم",esc(s.full_name||"—"))}
+      ${s.specialty?iconRow(I.star,"التخصص",esc(s.specialty)):""}
+      ${iconRow(I.star,"الدور",esc(roleAr(s.role)))}
+      ${s.license_no?iconRow(I.id,"رقم الترخيص",esc(s.license_no)):""}
+    </div>
+
+    <div class="sec-title">المؤسسة والاشتراك</div>
+    <div class="list">
+      ${iconRow(I.hosp,"المستشفى",esc(s.org_name||"—"))}
+      ${iconRow(I.plan,"الباقة",esc(s.plan_name||"—"),"")}
+      ${iconRow(I.plan,"الحالة",planPill)}
+    </div>
+
+    <div class="sec-title">المزايا المفعّلة</div>
+    <div class="list">
+      ${feats.length ? feats.map(k=>`<div class="feat-row">
+        <div class="fx y">${I.check}</div>
+        <div class="r-label" style="color:var(--text)">${esc(featLabel(k))}</div>
+        <div class="r-val" style="margin-inline-start:auto;color:var(--green)">مفعّل</div>
+      </div>`).join("")
+      : `<div class="feat-row"><div class="r-label">لا توجد مزايا مفعّلة على حسابك.</div></div>`}
+    </div>
+
+    <div class="sec-title">الجلسة</div>
+    <div class="list">
+      ${iconRow(I.key,"كود الدخول",`<span style="letter-spacing:2px">${esc(S.code)}</span>`)}
+    </div>
+
+    <button class="btn-danger" id="logoutBtn">تسجيل الخروج</button>
+    <div class="app-ver">Awn Care — عون كير · ${esc(CFG.APP_VERSION)}</div>
+  </div>`;
+  el("logoutBtn").onclick = ()=>{ if(confirm("تسجيل الخروج من عون كير؟")) logout(); };
+}
+function roleAr(r){ return ({resident:"طبيب نائب",doctor:"طبيب",admin:"أدمن",owner:"مدير",nurse:"تمريض",consultant:"استشاري"})[r]||(r||"طبيب"); }
+
+/* ================= THEME ================= */
+function applyTheme(){
+  const t = store.get("theme");
+  if(t) document.documentElement.setAttribute("data-theme", t);
+  else document.documentElement.removeAttribute("data-theme");
+}
+function toggleTheme(){
+  const cur = document.documentElement.getAttribute("data-theme");
+  const isDark = cur ? cur==="dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+  const next = isDark ? "light" : "dark";
+  store.set("theme", next); applyTheme();
+}
+
+/* ================= Add-to-home banner (iOS) ================= */
+function maybeShowA2H(){
+  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  const standalone = ("standalone" in navigator) && navigator.standalone;
+  if(!isIOS || standalone || store.get("a2h_dismissed")) return;
+  const d = document.createElement("div");
+  d.className="a2h";
+  d.innerHTML = `<div class="a2-ic">${brandSVG(18)}</div>
+    <div>عشان يشتغل كتطبيق كامل: اضغط <b>مشاركة</b> ثم <b>«إضافة إلى الشاشة الرئيسية»</b>.</div>
+    <button class="a2-x" id="a2x">✕</button>`;
+  document.body.appendChild(d);
+  el("a2x").onclick = ()=>{ store.set("a2h_dismissed","1"); d.remove(); };
+  setTimeout(()=>{ if(d.parentNode){ store.set("a2h_dismissed","1"); d.remove(); } }, 12000);
+}
+
+/* ================= BOOT ================= */
+function boot(){
+  applyTheme();
+  paintLogos();
+  makeTouchIcon();
+
+  // tab bar
+  document.querySelectorAll(".tab").forEach(t=>t.onclick=()=>setTab(t.dataset.tab));
+  el("themeBtn").onclick = toggleTheme;
+  el("refreshBtn").onclick = ()=>{
+    if(S.tab==="chat") loadHistory();
+    else if(S.tab==="ed") loadBoard("ed");
+    else if(S.tab==="round") loadBoard("round");
+  };
+
+  // login handlers
+  el("loginBtn").onclick = ()=>doLogin(el("codeInput").value);
+  const ci = el("codeInput");
+  ci.oninput = ()=>{ ci.value = ci.value.toUpperCase().replace(/[^A-Z0-9]/g,"").slice(0,6); };
+  ci.onkeydown = (e)=>{ if(e.key==="Enter") doLogin(ci.value); };
+
+  // camera/gallery
+  el("cameraInput").onchange = (e)=>{ const f=e.target.files[0]; if(f) setPendingPhoto(f); e.target.value=""; };
+
+  // try auto-login from saved code
+  const saved = store.get("code");
+  setTimeout(async ()=>{
+    if(saved){
+      try{
+        const params = { p_platform:"mobile", p_bot_key:"ed", p_chat_id:saved };
+        if(CFG.BIND_DEVICE) params.p_device_id = deviceId();
+        const staff = await rpc("app_resolve_staff", params);
+        S.code = saved; S.staff = staff; enterApp(); return;
+      }catch(e){ store.del("code"); }
+    }
+    el("splash").classList.add("hidden");
+    el("login").classList.remove("hidden");
+    setTimeout(()=>el("codeInput").focus(), 200);
+  }, 700);
+}
+document.addEventListener("DOMContentLoaded", boot);
+window.closeSheet = closeSheet;
+</script>
+</body>
+</html>
