@@ -65,7 +65,7 @@
   <script type="module">
     import { client, requireAdmin, applyProductTheme, escapeHtml, initials } from "../assets/core.js";
     import { renderShell } from "../assets/shell.js";
-    import { toast, openModal, busy, readImageResized } from "../assets/ui.js";
+    import { toast, openModal, busy, readImageResized, confirmDialog } from "../assets/ui.js";
 
     const PRODUCT = "awncare";
     applyProductTheme(PRODUCT);
@@ -160,6 +160,7 @@
             <div class="muted">${escapeHtml(w.org_name || "")}</div>
           </div>
           <button class="btn btn-neutral btn-sm brand-edit"><i class="ti ti-edit"></i> تعديل الاسم/اللوجو</button>
+          <button class="btn btn-neutral btn-sm units-btn"><i class="ti ti-stack-2"></i> أقسام الراوند</button>
         </div>
         <div class="plan-row">
           <label class="lbl">الباقة:</label>
@@ -169,6 +170,7 @@
         <div class="feat-list"></div>`;
 
       body.querySelector(".brand-edit").addEventListener("click", () => editBranding(id, body));
+      body.querySelector(".units-btn").addEventListener("click", () => manageUnits(id));
 
       const featList = body.querySelector(".feat-list");
       d.features.forEach((f) => featList.appendChild(featRow(id, f)));
@@ -187,6 +189,83 @@
         if (pill) { pill.textContent = data.workspace.plan_name || "بدون باقة"; pill.className = "pill " + (data.workspace.plan_name ? "pill-accent" : "pill-critical"); }
         toast("اتغيّرت الباقة", "good");
       });
+    }
+
+    // ---- أقسام الراوند (units) ----
+    async function manageUnits(id) {
+      const d = detailCache.get(id);
+      const box = document.createElement("div");
+      box.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px">
+          <span class="muted">الأقسام اللي بتظهر في الراوند لـ «${escapeHtml(d.workspace.name)}».</span>
+          <button class="btn btn-sm" id="add-unit"><i class="ti ti-plus"></i> قسم جديد</button>
+        </div>
+        <div id="units-list"><p class="muted">جاري التحميل…</p></div>`;
+      const listEl = box.querySelector("#units-list");
+      async function refresh() {
+        const { data, error } = await sb.rpc("admin_list_units", { p_workspace_id: id });
+        if (error) { listEl.innerHTML = `<p class="error-msg">${escapeHtml(error.message)}</p>`; return; }
+        const units = data || [];
+        if (units.length === 0) { listEl.innerHTML = `<div class="empty-state" style="padding:18px">مفيش أقسام لسه.</div>`; return; }
+        listEl.innerHTML = "";
+        units.forEach((u) => listEl.appendChild(unitRow(u, refresh)));
+      }
+      box.querySelector("#add-unit").addEventListener("click", () => addUnit(id, refresh));
+      openModal({ title: "أقسام الراوند", subtitle: d.workspace.name, icon: "ti-stack-2", wide: true, body: box, actionsLeadSpacer: true, actions: [{ label: "تمام", onClick: (c) => c() }] });
+      refresh();
+    }
+    function unitRow(u, refresh) {
+      const row = document.createElement("div");
+      row.className = "feat-row";
+      row.innerHTML = `
+        <div class="feat-info"><div class="feat-name">${escapeHtml(u.name)}</div>
+          <div class="feat-desc">${u.in_use > 0 ? `مستخدم في ${u.in_use} حالة` : "مش مستخدم"}</div></div>
+        <div class="row-actions"></div>`;
+      const acts = row.querySelector(".row-actions");
+      const rn = document.createElement("button"); rn.className = "icon-btn"; rn.title = "تغيير الاسم"; rn.innerHTML = `<i class="ti ti-edit"></i>`;
+      rn.addEventListener("click", () => renameUnit(u, refresh));
+      const del = document.createElement("button"); del.className = "icon-btn"; del.title = "حذف"; del.innerHTML = `<i class="ti ti-trash"></i>`;
+      del.addEventListener("click", () => deleteUnit(u, refresh));
+      acts.appendChild(rn); acts.appendChild(del);
+      return row;
+    }
+    function addUnit(id, refresh) {
+      const body = document.createElement("div");
+      body.innerHTML = `<div class="field"><label class="lbl">اسم القسم</label><input type="text" id="un" placeholder="مثلاً: باطنة"></div>`;
+      const m = openModal({ title: "قسم جديد", icon: "ti-plus", body, actionsLeadSpacer: true, actions: [
+        { label: "إلغاء", variant: "btn-neutral", onClick: (c) => c() },
+        { label: "إضافة", icon: "ti-check", onClick: async (close) => {
+            const n = body.querySelector("#un").value.trim();
+            if (!n) { toast("اكتب اسم القسم", "error"); return; }
+            const btn = m.root.querySelector('[data-act="1"]'); const restore = busy(btn, "بيحفظ…");
+            const { error } = await sb.rpc("admin_create_unit", { p_workspace_id: id, p_name: n });
+            if (error) { restore(); toast(error.message, "error"); return; }
+            close(); toast("اتضاف القسم", "good"); refresh();
+          } },
+      ]});
+    }
+    function renameUnit(u, refresh) {
+      const body = document.createElement("div");
+      body.innerHTML = `<div class="field"><label class="lbl">اسم القسم</label><input type="text" id="un"></div>`;
+      body.querySelector("#un").value = u.name || "";
+      const m = openModal({ title: "تغيير اسم القسم", icon: "ti-edit", body, actionsLeadSpacer: true, actions: [
+        { label: "إلغاء", variant: "btn-neutral", onClick: (c) => c() },
+        { label: "حفظ", icon: "ti-check", onClick: async (close) => {
+            const n = body.querySelector("#un").value.trim();
+            if (!n) { toast("الاسم مطلوب", "error"); return; }
+            const btn = m.root.querySelector('[data-act="1"]'); const restore = busy(btn, "بيحفظ…");
+            const { error } = await sb.rpc("admin_rename_unit", { p_unit_id: u.id, p_name: n });
+            if (error) { restore(); toast(error.message, "error"); return; }
+            close(); toast("اتحفظ", "good"); refresh();
+          } },
+      ]});
+    }
+    async function deleteUnit(u, refresh) {
+      const ok = await confirmDialog({ title: "حذف القسم؟", icon: "ti-trash", danger: true, confirmLabel: "حذف", message: `هيتحذف قسم «${u.name}». مش هينفع لو مستخدم في حالات — في الحالة دي غيّر اسمه بدل ما تمسحه.` });
+      if (!ok) return;
+      const { error } = await sb.rpc("admin_delete_unit", { p_unit_id: u.id });
+      if (error) { toast(error.message, "error"); return; }
+      toast("اتحذف", "good"); refresh();
     }
 
     function editBranding(id, body) {
