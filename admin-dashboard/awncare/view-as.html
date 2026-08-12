@@ -33,6 +33,10 @@
     .sec .line:last-child { border-bottom: none; }
     .kv { display: flex; flex-wrap: wrap; gap: 6px 18px; }
     .kv div { font-size: .9em; } .kv b { color: var(--ink-strong); }
+    .unit-sec { margin-bottom: 18px; }
+    .unit-h { display: flex; align-items: center; gap: 10px; margin: 4px 0 10px; font-weight: 700; color: var(--ink-strong); border-bottom: 2px solid var(--rule); padding-bottom: 6px; }
+    .unit-count { background: var(--ink-strong); color: #fff; border-radius: 100px; font-size: .72em; padding: 1px 9px; font-variant-numeric: tabular-nums; }
+    .unit-empty { color: var(--grey-2); font-size: .85em; padding: 4px 2px 6px; }
   </style>
 </head>
 <body>
@@ -157,12 +161,52 @@
       if (botOff) banner = `<div class="banner warn"><i class="ti ti-lock"></i><div>الوحدة دي <b>مقفولة</b> للدكتور ده، فالتاب مش ظاهر عنده في التطبيق. تحت اللي موجود فعليًا في الداتا (لو حابب تشوف). لتفعيلها: صفحة «الاشتراكات والتحكم».</div></div>`;
       if (error) { slot.innerHTML = banner + `<p class="error-msg">${escapeHtml(error.message)}</p>`; return; }
       const results = (data && data.results) || [];
-      if (results.length === 0) {
-        slot.innerHTML = banner + `<div class="empty-state"><i class="ti ti-clipboard-off" style="font-size:2em;display:block;margin-bottom:10px"></i>${botOff ? "مفيش حالات في الوحدة دي." : "مفيش حالات مطابقة — التاب ده هيبان فاضي عند الدكتور."}</div>`;
-        return;
+      const grouped = (activeBot === "round" || activeBot === "clinic");
+      if (grouped) {
+        const units = await getUnits();
+        slot.innerHTML = banner + renderGrouped(results, units);
+      } else if (results.length === 0) {
+        slot.innerHTML = banner + emptyHtml(botOff);
+      } else {
+        slot.innerHTML = banner + `<div class="board">${results.map(cardHtml).join("")}</div>`;
       }
-      slot.innerHTML = banner + `<div class="board">${results.map(cardHtml).join("")}</div>`;
       slot.querySelectorAll(".pcard").forEach((el) => el.addEventListener("click", () => openPatient(el.dataset.enc)));
+    }
+
+    function emptyHtml(botOff) {
+      return `<div class="empty-state"><i class="ti ti-clipboard-off" style="font-size:2em;display:block;margin-bottom:10px"></i>${botOff ? "مفيش حالات في الوحدة دي." : "مفيش حالات مطابقة — التاب ده هيبان فاضي عند الدكتور."}</div>`;
+    }
+
+    const unitsCache = {};
+    async function getUnits() {
+      const wid = cur.workspace_id;
+      if (!(wid in unitsCache)) {
+        const { data } = await sb.rpc("admin_list_units", { p_workspace_id: wid });
+        unitsCache[wid] = (data || []).map((u) => u.name);
+      }
+      return unitsCache[wid];
+    }
+
+    // بورد الراوند/العيادة مقسّم حسب القسم — بيعرض كل أقسام المستشفى (حتى الفاضية)
+    function renderGrouped(results, unitNames) {
+      const byUnit = {};
+      results.forEach((r) => { const k = r.unit || "__none__"; (byUnit[k] = byUnit[k] || []).push(r); });
+      const listed = new Set(unitNames || []);
+      const extras = Object.keys(byUnit).filter((k) => k !== "__none__" && !listed.has(k));
+
+      let html = "";
+      (unitNames || []).forEach((name) => { html += sectionHtml(name, byUnit[name] || []); });
+      extras.forEach((name) => { html += sectionHtml(name + " (قسم قديم/غير مُدار)", byUnit[name]); });
+      if (byUnit["__none__"]) html += sectionHtml("بدون قسم محدّد", byUnit["__none__"]);
+
+      if (!html) html = `<div class="empty-state">المستشفى ده لسه ماعندوش أقسام. ضيفها من «الاشتراكات والتحكم».</div>`;
+      return html;
+    }
+    function sectionHtml(name, rows) {
+      return `<div class="unit-sec">
+        <div class="unit-h"><span>${escapeHtml(name)}</span><span class="unit-count">${rows.length}</span></div>
+        ${rows.length ? `<div class="board">${rows.map(cardHtml).join("")}</div>` : `<div class="unit-empty">— مفيش حالات في القسم ده —</div>`}
+      </div>`;
     }
 
     function cardHtml(r) {
