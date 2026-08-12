@@ -32,6 +32,20 @@ export function client(product) {
   return clients[product];
 }
 
+// عميل بدون جلسة (anon role) — للدوال الممنوحة لـ anon بس (زي app_* بتاعت
+// بورد الدكتور). العميل العادي بيحمل جلسة المدير (authenticated) فمينفعش معاها.
+const anonClients = {};
+export function anonClient(product) {
+  if (!anonClients[product]) {
+    const p = cfg.PRODUCTS[product];
+    if (!p) throw new Error("unknown product: " + product);
+    anonClients[product] = createClient(p.SUPABASE_URL, p.SUPABASE_ANON_KEY, {
+      auth: { persistSession: false, autoRefreshToken: false, storageKey: "awn-anon-" + product },
+    });
+  }
+  return anonClients[product];
+}
+
 export const authClient = client(cfg.AUTH_PRODUCT);
 export const productConfig = (product) => cfg.PRODUCTS[product];
 export const authProduct = cfg.AUTH_PRODUCT;

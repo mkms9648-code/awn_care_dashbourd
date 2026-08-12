@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>تجربة الدكتور — عون كير</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css" />
+  <link rel="stylesheet" href="../assets/style.css" />
+  <script src="../config.js"></script>
+  <style>
+    .va-tabs { display: flex; gap: 6px; margin: 14px 0 6px; flex-wrap: wrap; }
+    .va-tab { display: inline-flex; align-items: center; gap: 7px; padding: 9px 18px; border-radius: 100px; border: 1.5px solid var(--rule); background: var(--white); color: var(--ink); cursor: pointer; font-family: inherit; font-size: .9em; font-weight: 600; }
+    .va-tab.active { background: var(--ink-strong); color: #fff; border-color: var(--ink-strong); }
+    .va-tab .off { font-size: .8em; color: var(--critical); }
+    .chips { display: flex; gap: 7px; flex-wrap: wrap; margin: 8px 0 16px; }
+    .chip { padding: 6px 13px; border-radius: 100px; border: 1px solid var(--rule); background: var(--white); color: var(--grey-1); cursor: pointer; font-size: .82em; }
+    .chip.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+    .board { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 12px; }
+    .pcard { background: var(--white); border: 1px solid var(--rule); border-radius: var(--radius-lg); padding: 14px 16px; box-shadow: var(--shadow); cursor: pointer; transition: .12s; }
+    .pcard:hover { border-color: var(--accent-border); box-shadow: var(--shadow-md); }
+    .pcard .pname { font-weight: 700; color: var(--ink-strong); }
+    .pcard .pmeta { font-size: .8em; color: var(--grey-2); margin-top: 3px; display: flex; gap: 8px; flex-wrap: wrap; }
+    .pcard .pdetail { margin-top: 8px; font-size: .82em; color: var(--ink); border-top: 1px dashed var(--rule); padding-top: 8px; }
+    .banner { border-radius: 10px; padding: 11px 15px; font-size: .88em; margin-bottom: 14px; display: flex; gap: 9px; align-items: flex-start; }
+    .banner.warn { background: var(--warn-bg); color: var(--warn); border: 1px solid var(--warn-border); }
+    .banner.info { background: var(--accent-light); color: var(--accent-dark); border: 1px solid var(--accent-border); }
+    .sec { margin-bottom: 16px; }
+    .sec h4 { margin: 0 0 8px; font-size: .82em; text-transform: uppercase; letter-spacing: .05em; color: var(--grey-2); }
+    .sec .line { padding: 7px 0; border-bottom: 1px solid var(--rule); font-size: .9em; }
+    .sec .line:last-child { border-bottom: none; }
+    .kv { display: flex; flex-wrap: wrap; gap: 6px 18px; }
+    .kv div { font-size: .9em; } .kv b { color: var(--ink-strong); }
+  </style>
+</head>
+<body>
+  <div class="app-shell">
+    <aside id="app-nav"></aside>
+    <main class="main">
+      <div class="page">
+        <div class="page-head">
+          <div>
+            <h1>تجربة الدكتور</h1>
+            <p class="subtitle">ادخل بحساب أي دكتور وشوف بورداته وحالاته زي ما بيشوفها في التطبيق بالظبط.</p>
+          </div>
+        </div>
+
+        <div class="card" style="margin-bottom:16px">
+          <label class="lbl">اختار دكتور</label>
+          <select id="doc-picker"><option value="">— اختار —</option></select>
+          <div id="doc-badges" style="margin-top:12px"></div>
+        </div>
+
+        <div id="viewport"></div>
+      </div>
+    </main>
+  </div>
+
+  <script type="module">
+    import { client, anonClient, requireAdmin, applyProductTheme, escapeHtml, fmtDate, initials } from "../assets/core.js";
+    import { renderShell } from "../assets/shell.js";
+    import { openModal, toast } from "../assets/ui.js";
+
+    const PRODUCT = "awncare";
+    applyProductTheme(PRODUCT);
+    const session = await requireAdmin();
+    if (!session) throw new Error("not authorized");
+    renderShell(session, { product: PRODUCT, active: "viewas" });
+
+    const sb = client("awncare");        // admin RPCs (authenticated)
+    const anon = anonClient("awncare");  // app_* RPCs (anon role + doctor code)
+
+    const BOTS = [
+      { key: "ed", label: "الطوارئ", feature: "ed_module", icon: "ti-ambulance" },
+      { key: "round", label: "الراوند", feature: "round_module", icon: "ti-walk" },
+      { key: "clinic", label: "العيادة", feature: "clinic_module", icon: "ti-building-hospital" },
+    ];
+    const FILTERS = [
+      { k: "all", label: "الكل" }, { k: "mine", label: "حالاته" },
+      { k: "pending_orders", label: "طلبات معلّقة" }, { k: "overdue_commitments", label: "التزامات متأخرة" },
+      { k: "vitals_stale", label: "فيتالز قديمة" }, { k: "open_complications", label: "مضاعفات مفتوحة" },
+    ];
+
+    const pickerEl = document.getElementById("doc-picker");
+    const badgesEl = document.getElementById("doc-badges");
+    const vp = document.getElementById("viewport");
+
+    let doctors = [];
+    let cur = null;              // الدكتور الحالي
+    let features = [];           // مميزات الدكتور الفعّالة
+    let activeBot = "ed", activeFilter = "all";
+
+    async function boot() {
+      const { data, error } = await sb.rpc("admin_list_doctors", { p_workspace_id: null });
+      if (error) { vp.innerHTML = `<p class="error-msg">${escapeHtml(error.message)}</p>`; return; }
+      doctors = data || [];
+      pickerEl.innerHTML = `<option value="">— اختار دكتور —</option>` + doctors.map((d) =>
+        `<option value="${escapeHtml(d.staff_id)}">${escapeHtml(d.full_name)} — ${escapeHtml(d.workspace_name)}${d.status !== "active" ? " (" + escapeHtml(d.status) + ")" : ""}</option>`).join("");
+    }
+
+    pickerEl.addEventListener("change", async () => {
+      cur = doctors.find((d) => d.staff_id === pickerEl.value) || null;
+      activeBot = "ed"; activeFilter = "all";
+      if (!cur) { badgesEl.innerHTML = ""; vp.innerHTML = ""; return; }
+      if (!cur.mobile_code) {
+        badgesEl.innerHTML = "";
+        vp.innerHTML = `<div class="banner warn"><i class="ti ti-key-off"></i><div>الدكتور ده لسه ماعندوش كود دخول للتطبيق. اعمله كود من صفحة «الأطباء والدخول» الأول.</div></div>`;
+        return;
+      }
+      await loadFeatures();
+      render();
+    });
+
+    async function loadFeatures() {
+      features = [];
+      const { data, error } = await anon.rpc("app_resolve_staff", { p_platform: "mobile", p_bot_key: activeBot, p_chat_id: cur.mobile_code });
+      if (!error && data && Array.isArray(data.features)) features = data.features;
+      renderBadges();
+    }
+
+    function renderBadges() {
+      badgesEl.innerHTML = `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <span class="muted">الوحدات المتاحة للدكتور:</span>
+        ${BOTS.map((b) => {
+          const on = features.includes(b.feature);
+          return `<span class="pill ${on ? "pill-good" : "pill-muted"}"><i class="ti ${b.icon}"></i> ${b.label} · ${on ? "مفتوحة" : "مقفولة"}</span>`;
+        }).join("")}
+      </div>`;
+    }
+
+    function render() {
+      vp.innerHTML = `
+        <div class="va-tabs">
+          ${BOTS.map((b) => `<button class="va-tab ${b.key === activeBot ? "active" : ""}" data-bot="${b.key}">
+            <i class="ti ${b.icon}"></i> ${b.label}${!features.includes(b.feature) ? ' <span class="off">(مقفولة)</span>' : ""}
+          </button>`).join("")}
+        </div>
+        <div class="chips">
+          ${FILTERS.map((f) => `<button class="chip ${f.k === activeFilter ? "active" : ""}" data-filter="${f.k}">${f.label}</button>`).join("")}
+        </div>
+        <div id="board-slot"></div>`;
+      vp.querySelectorAll(".va-tab").forEach((t) => t.addEventListener("click", () => { activeBot = t.dataset.bot; activeFilter = "all"; render(); }));
+      vp.querySelectorAll(".chip").forEach((c) => c.addEventListener("click", () => { activeFilter = c.dataset.filter; render(); }));
+      loadBoard();
+    }
+
+    async function loadBoard() {
+      const slot = vp.querySelector("#board-slot");
+      slot.innerHTML = `<p class="muted">جاري التحميل…</p>`;
+      const botOff = !features.includes(BOTS.find((b) => b.key === activeBot).feature);
+      const { data, error } = await anon.rpc("app_encounter_list", {
+        p_platform: "mobile", p_bot_key: activeBot, p_chat_id: cur.mobile_code, p_filter: activeFilter, p_category: null,
+      });
+      let banner = "";
+      if (botOff) banner = `<div class="banner warn"><i class="ti ti-lock"></i><div>الوحدة دي <b>مقفولة</b> للدكتور ده، فالتاب مش ظاهر عنده في التطبيق. تحت اللي موجود فعليًا في الداتا (لو حابب تشوف). لتفعيلها: صفحة «الاشتراكات والتحكم».</div></div>`;
+      if (error) { slot.innerHTML = banner + `<p class="error-msg">${escapeHtml(error.message)}</p>`; return; }
+      const results = (data && data.results) || [];
+      if (results.length === 0) {
+        slot.innerHTML = banner + `<div class="empty-state"><i class="ti ti-clipboard-off" style="font-size:2em;display:block;margin-bottom:10px"></i>${botOff ? "مفيش حالات في الوحدة دي." : "مفيش حالات مطابقة — التاب ده هيبان فاضي عند الدكتور."}</div>`;
+        return;
+      }
+      slot.innerHTML = banner + `<div class="board">${results.map(cardHtml).join("")}</div>`;
+      slot.querySelectorAll(".pcard").forEach((el) => el.addEventListener("click", () => openPatient(el.dataset.enc)));
+    }
+
+    function cardHtml(r) {
+      let detail = "";
+      if (Array.isArray(r.detail) && r.detail.length) {
+        detail = `<div class="pdetail">${r.detail.map((d) =>
+          escapeHtml(d.name || d.text || d.description || (typeof d === "string" ? d : JSON.stringify(d)))).join("، ")}</div>`;
+      }
+      return `<div class="pcard" data-enc="${escapeHtml(r.encounter_id)}">
+        <div class="pname">${escapeHtml(r.patient || "—")}</div>
+        <div class="pmeta">
+          <span>#${escapeHtml(r.mrn || "—")}</span>
+          ${r.handle ? `<span>· ${escapeHtml(r.handle)}</span>` : ""}
+          ${r.unit ? `<span>· ${escapeHtml(r.unit)}</span>` : ""}
+          <span>· ${r.days_open ?? 0} يوم</span>
+        </div>
+        ${r.attending ? `<div class="pmeta"><i class="ti ti-user"></i> ${escapeHtml(r.attending)}</div>` : ""}
+        ${detail}
+      </div>`;
+    }
+
+    async function openPatient(encId) {
+      const bodyEl = document.createElement("div");
+      bodyEl.innerHTML = `<p class="muted">جاري التحميل…</p>`;
+      openModal({ title: "ملف المريض", subtitle: cur.full_name + " · " + BOTS.find((b) => b.key === activeBot).label, icon: "ti-user-heart", wide: true, body: bodyEl, actionsLeadSpacer: true, actions: [{ label: "إغلاق", onClick: (close) => close() }] });
+      const { data, error } = await anon.rpc("app_patient_summary", { p_platform: "mobile", p_bot_key: activeBot, p_chat_id: cur.mobile_code, p_encounter_id: encId });
+      if (error) { bodyEl.innerHTML = `<p class="error-msg">${escapeHtml(error.message)}</p>`; return; }
+      bodyEl.innerHTML = renderSummary(data);
+    }
+
+    function list(arr, fn) { return (arr && arr.length) ? arr.map(fn).map((h) => `<div class="line">${h}</div>`).join("") : `<div class="line muted">—</div>`; }
+
+    function renderSummary(s) {
+      const p = s.patient || {}, e = s.encounter || {};
+      const age = p.birth_year ? (new Date().getFullYear() - p.birth_year) + " سنة" : "";
+      return `
+        <div class="sec">
+          <div class="kv">
+            <div><b>${escapeHtml(p.name || "—")}</b> <span class="muted">#${escapeHtml(p.mrn || "")}</span></div>
+            <div>${p.sex === "m" ? "ذكر" : p.sex === "f" ? "أنثى" : ""} ${age}</div>
+            <div>${e.unit ? "قسم: " + escapeHtml(e.unit) : ""}</div>
+            <div>${e.handle ? "مقبض: " + escapeHtml(e.handle) : ""}</div>
+            <div>${e.attending ? "الطبيب: " + escapeHtml(e.attending) : ""}</div>
+            <div>فتح: ${fmtDate(e.opened_at)}</div>
+          </div>
+          ${(p.allergies && p.allergies.length) ? `<div class="line" style="margin-top:8px;color:var(--critical)">⚠️ حساسية: ${p.allergies.map(escapeHtml).join("، ")}</div>` : ""}
+          ${(p.chronic_conditions && p.chronic_conditions.length) ? `<div class="line">أمراض مزمنة: ${p.chronic_conditions.map(escapeHtml).join("، ")}</div>` : ""}
+        </div>
+        <div class="sec"><h4>آخر العلامات الحيوية</h4>${list(s.latest_vitals, (v) => `${escapeHtml(v.metric)}: <b>${escapeHtml(String(v.value))}</b> ${escapeHtml(v.unit || "")} <span class="muted">(${fmtDate(v.measured_at)})</span>`)}</div>
+        <div class="sec"><h4>طلبات مفتوحة</h4>${list(s.open_orders, (o) => `${escapeHtml(o.category || "")} · ${escapeHtml(o.name || "")}`)}</div>
+        <div class="sec"><h4>أدوية فعّالة</h4>${list(s.active_medications, (m) => `${escapeHtml(m.name || "")} ${escapeHtml(m.dose || "")} ${escapeHtml(m.route || "")} ${escapeHtml(m.frequency || "")}`)}</div>
+        <div class="sec"><h4>التزامات مفتوحة</h4>${list(s.open_commitments, (c) => `${escapeHtml(c.text || "")} ${c.overdue ? '<span class="pill pill-critical">متأخر</span>' : ""} ${c.due_at ? `<span class="muted">(${fmtDate(c.due_at)})</span>` : ""}`)}</div>
+        <div class="sec"><h4>مضاعفات مفتوحة</h4>${list(s.open_complications, (x) => escapeHtml(x.description || ""))}</div>
+        <div class="sec"><h4>آخر الملاحظات</h4>${list(s.recent_notes, (n) => `<b>${escapeHtml(n.kind || "")}</b>: ${escapeHtml(n.body || "")} <span class="muted">(${fmtDate(n.at)})</span>`)}</div>
+        ${(s.attachments && s.attachments.length) ? `<div class="sec"><h4>مرفقات</h4>${list(s.attachments, (a) => `${escapeHtml(a.kind || "ملف")}${a.caption ? ": " + escapeHtml(a.caption) : ""} <span class="muted">(${escapeHtml(a.uploaded_by || "")})</span>`)}</div>` : ""}`;
+    }
+
+    boot();
+  </script>
+</body>
+</html>
