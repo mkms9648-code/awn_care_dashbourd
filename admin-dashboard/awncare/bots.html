@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>البرومبتات والأدوات — عون كير</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css" />
+  <link rel="stylesheet" href="../assets/style.css" />
+  <script src="../config.js"></script>
+  <style>
+    .bt-tabs { display: flex; gap: 8px; margin-bottom: 16px; }
+    .bt-tab { padding: 9px 16px; border-radius: 999px; font-size: 0.85em; font-weight: 600; color: var(--grey-1); background: var(--white); border: 1px solid var(--rule); }
+    .bt-tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+    .bot-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; }
+    .bot-card { background: var(--white); border: 1px solid var(--rule); border-radius: 14px; padding: 16px; }
+    .bot-card .bc-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+    .bot-card .bc-icon { width: 36px; height: 36px; border-radius: 10px; background: var(--accent-light); color: var(--accent-dark); display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0; }
+    .bot-card .bc-name { font-weight: 700; color: var(--ink-strong); }
+    .bot-card .bc-key { font-size: 0.78em; color: var(--grey-2); }
+    .bot-card .bc-meta { font-size: 0.8em; color: var(--grey-2); margin-bottom: 12px; line-height: 1.8; }
+    .fn-row { display: flex; align-items: center; gap: 12px; padding: 11px 4px; border-bottom: 1px solid var(--rule); cursor: pointer; }
+    .fn-row:last-child { border-bottom: none; }
+    .fn-row:hover { background: var(--paper); }
+    .fn-row .fn-name { font-family: "IBM Plex Sans", monospace; direction: ltr; font-weight: 700; color: var(--ink-strong); }
+    .fn-row .fn-args { flex: 1; font-size: 0.8em; color: var(--grey-2); font-family: "IBM Plex Sans", monospace; direction: ltr; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .code-view { background: var(--paper); border: 1px solid var(--rule); border-radius: 10px; padding: 14px; max-height: 60vh; overflow: auto; }
+    .code-view pre { margin: 0; font-size: 0.82em; line-height: 1.6; white-space: pre-wrap; word-break: break-word; }
+    textarea.prompt-editor { width: 100%; font-family: "IBM Plex Sans", monospace; direction: ltr; text-align: left; font-size: 0.85em; line-height: 1.6; min-height: 50vh; resize: vertical; }
+  </style>
+</head>
+<body>
+  <div class="app-shell">
+    <aside id="app-nav"></aside>
+    <main class="main">
+      <div class="page">
+        <div class="page-head">
+          <div>
+            <h1>البرومبتات والأدوات</h1>
+            <p class="subtitle">شوف وعدّل تعليمات البوتات (system prompts)، وشوف دوال SQL اللي البوتات بتستخدمها كأدوات — كله من هنا بدل الدخول على Supabase.</p>
+          </div>
+        </div>
+
+        <div class="bt-tabs">
+          <button class="bt-tab active" data-tab="prompts">البرومبتات</button>
+          <button class="bt-tab" data-tab="functions">الأدوات (SQL) — عرض فقط</button>
+        </div>
+
+        <div id="tab-prompts">
+          <div class="toolbar">
+            <div class="hint" style="margin:0">هنا تعليمات كل بوت (اللي بيحدّد سلوكه) — بتتسحب لحظيًا من n8n في كل رسالة، فأي تعديل بيشتغل فورًا من غير أي حاجة تانية.</div>
+            <button class="btn" id="add-bot" style="margin-inline-start:auto"><i class="ti ti-plus"></i> بوت جديد</button>
+          </div>
+          <div id="bots-wrap"><p class="muted">جاري التحميل…</p></div>
+        </div>
+
+        <div id="tab-functions" style="display:none">
+          <div class="toolbar">
+            <div class="search-box" style="max-width:340px">
+              <i class="ti ti-search"></i>
+              <input type="search" id="fn-search" placeholder="ابحث باسم الدالة… (مثال: create_patient)" />
+            </div>
+          </div>
+          <div class="card"><div id="fn-wrap"><p class="muted">جاري التحميل…</p></div></div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script type="module">
+    import { client, requireAdmin, applyProductTheme, escapeHtml, fmtDate } from "../assets/core.js";
+    import { renderShell } from "../assets/shell.js";
+    import { openModal, confirmDialog, toast, copyToClipboard, busy } from "../assets/ui.js";
+
+    const PRODUCT = "awncare";
+    applyProductTheme(PRODUCT);
+    const session = await requireAdmin();
+    if (!session) throw new Error("not authorized");
+    renderShell(session, { product: PRODUCT, active: "bots" });
+
+    const sb = client(PRODUCT);
+
+    const BOT_LABELS = {
+      ed: { name: "الطوارئ (Dash)", icon: "ti-ambulance" },
+      round: { name: "الراوند (Rounds)", icon: "ti-stethoscope" },
+      clinic: { name: "العيادة (Clinic)", icon: "ti-building-hospital" },
+    };
+    function botLabel(key) { return (BOT_LABELS[key] || { name: key, icon: "ti-robot" }); }
+
+    // ---- تبويبات ----
+    document.querySelectorAll(".bt-tab").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        document.querySelectorAll(".bt-tab").forEach((b) => b.classList.remove("active"));
+        btn.classList.add("active");
+        const tab = btn.dataset.tab;
+        document.getElementById("tab-prompts").style.display = tab === "prompts" ? "" : "none";
+        document.getElementById("tab-functions").style.display = tab === "functions" ? "" : "none";
+        if (tab === "functions" && !fnLoaded) loadFunctions();
+      });
+    });
+
+    // ============================================================
+    // البرومبتات
+    // ============================================================
+    const botsWrap = document.getElementById("bots-wrap");
+
+    async function loadBots() {
+      botsWrap.innerHTML = `<p class="muted">جاري التحميل…</p>`;
+      const { data, error } = await sb.rpc("admin_list_bot_prompts");
+      if (error) { botsWrap.innerHTML = `<p class="error-msg">${escapeHtml(error.message)}</p>`; return; }
+      const bots = data || [];
+      if (bots.length === 0) { botsWrap.innerHTML = `<div class="empty-state">مفيش برومبتات لسه.</div>`; return; }
+      const grid = document.createElement("div");
+      grid.className = "bot-grid";
+      bots.forEach((b) => grid.appendChild(botCard(b)));
+      botsWrap.innerHTML = "";
+      botsWrap.appendChild(grid);
+    }
+
+    function botCard(b) {
+      const lbl = botLabel(b.bot_key);
+      const el = document.createElement("div");
+      el.className = "bot-card";
+      el.innerHTML = `
+        <div class="bc-head">
+          <div class="bc-icon"><i class="ti ${lbl.icon}"></i></div>
+          <div>
+            <div class="bc-name">${escapeHtml(lbl.name)}</div>
+            <div class="bc-key mono">${escapeHtml(b.bot_key)}</div>
+          </div>
+        </div>
+        <div class="bc-meta">
+          ${(b.length || 0).toLocaleString("ar-EG")} حرف
+          ${b.updated_at ? `<br>آخر تعديل: ${fmtDate(b.updated_at)}${b.updated_by ? " · " + escapeHtml(b.updated_by) : ""}` : ""}
+        </div>
+        <button class="btn btn-neutral" style="width:100%"><i class="ti ti-edit"></i> تعديل البرومبت</button>`;
+      el.querySelector("button").addEventListener("click", () => editBot(b.bot_key));
+      return el;
+    }
+
+    async function editBot(botKey) {
+      const { data, error } = await sb.rpc("admin_get_bot_prompt", { p_bot_key: botKey });
+      if (error) { toast(error.message, "error"); return; }
+      openPromptEditor(botKey, data.prompt_text || "", data.updated_at, data.updated_by);
+    }
+
+    function openPromptEditor(botKey, text, updatedAt, updatedBy) {
+      const lbl = botLabel(botKey);
+      const body = document.createElement("div");
+      body.innerHTML = `
+        <div class="field">
+          <label class="lbl">نص البرومبت (تعليمات البوت الكاملة)</label>
+          <textarea class="prompt-editor" id="p-text" spellcheck="false"></textarea>
+        </div>
+        <div class="hint">${updatedAt ? `آخر تعديل: ${escapeHtml(fmtDate(updatedAt))}${updatedBy ? " · " + escapeHtml(updatedBy) : ""}` : "لسه ما اتعدّلش."} — التعديل بيشتغل فورًا في كل محادثة جديدة، من غير أي حاجة في n8n.</div>`;
+      body.querySelector("#p-text").value = text;
+      const m = openModal({
+        title: "تعديل البرومبت", subtitle: lbl.name, icon: lbl.icon, wide: true,
+        body, actionsLeadSpacer: true,
+        actions: [
+          { label: "إلغاء", variant: "btn-neutral", onClick: (close) => close() },
+          { label: "حفظ", icon: "ti-check", onClick: async (close) => {
+              const newText = body.querySelector("#p-text").value;
+              const btn = m.root.querySelector('[data-act="1"]'); const restore = busy(btn, "بيحفظ…");
+              const { error } = await sb.rpc("admin_set_bot_prompt", { p_bot_key: botKey, p_prompt_text: newText });
+              if (error) { restore(); toast(error.message, "error"); return; }
+              close(); toast("اتحفظ البرومبت", "good"); loadBots();
+            } },
+        ],
+      });
+    }
+
+    document.getElementById("add-bot").addEventListener("click", () => {
+      const body = document.createElement("div");
+      body.innerHTML = `
+        <div class="field">
+          <label class="lbl">مفتاح البوت (bot_key) — بالإنجليزي، زي ed/round/clinic</label>
+          <input type="text" id="new-key" placeholder="مثال: pharmacy" />
+        </div>
+        <div class="field">
+          <label class="lbl">نص البرومبت</label>
+          <textarea class="prompt-editor" id="new-text" style="min-height:30vh" spellcheck="false" placeholder="اكتب تعليمات البوت هنا…"></textarea>
+        </div>
+        <div class="hint">لازم البوت يبقى متظبّط في n8n كمان ويقرا برومبته من هنا (app_get_bot_prompt) عشان يشتغل فعليًا.</div>`;
+      const m = openModal({
+        title: "بوت جديد", icon: "ti-plus", wide: true, body, actionsLeadSpacer: true,
+        actions: [
+          { label: "إلغاء", variant: "btn-neutral", onClick: (close) => close() },
+          { label: "حفظ", icon: "ti-check", onClick: async (close) => {
+              const key = body.querySelector("#new-key").value.trim();
+              const text = body.querySelector("#new-text").value;
+              if (!key) { toast("اكتب مفتاح البوت", "error"); return; }
+              if (!text.trim()) { toast("اكتب نص البرومبت", "error"); return; }
+              const btn = m.root.querySelector('[data-act="1"]'); const restore = busy(btn, "بيحفظ…");
+              const { error } = await sb.rpc("admin_set_bot_prompt", { p_bot_key: key, p_prompt_text: text });
+              if (error) { restore(); toast(error.message, "error"); return; }
+              close(); toast("اتعمل البوت", "good"); loadBots();
+            } },
+        ],
+      });
+    });
+
+    // ============================================================
+    // الأدوات (SQL) — عرض فقط
+    // ============================================================
+    const fnWrap = document.getElementById("fn-wrap");
+    const fnSearch = document.getElementById("fn-search");
+    let allFunctions = [];
+    let fnLoaded = false;
+
+    async function loadFunctions() {
+      fnWrap.innerHTML = `<p class="muted">جاري التحميل…</p>`;
+      const { data, error } = await sb.rpc("admin_list_app_functions");
+      if (error) { fnWrap.innerHTML = `<p class="error-msg">${escapeHtml(error.message)}</p>`; return; }
+      allFunctions = data || [];
+      fnLoaded = true;
+      renderFunctions();
+    }
+
+    function renderFunctions() {
+      const q = fnSearch.value.trim().toLowerCase();
+      const items = q ? allFunctions.filter((f) => f.name.toLowerCase().includes(q)) : allFunctions;
+      if (items.length === 0) { fnWrap.innerHTML = `<div class="empty-state">مفيش دوال مطابقة.</div>`; return; }
+      fnWrap.innerHTML = "";
+      items.forEach((f) => {
+        const row = document.createElement("div");
+        row.className = "fn-row";
+        row.innerHTML = `<span class="fn-name">${escapeHtml(f.name)}</span><span class="fn-args">(${escapeHtml(f.args || "")})</span><i class="ti ti-chevron-left"></i>`;
+        row.addEventListener("click", () => viewFunction(f));
+        fnWrap.appendChild(row);
+      });
+    }
+
+    function viewFunction(f) {
+      const body = document.createElement("div");
+      body.innerHTML = `
+        <div class="hint" style="margin:0 0 10px">النتيجة: <span class="mono">${escapeHtml(f.result || "")}</span></div>
+        <div class="code-view"><pre class="mono">${escapeHtml(f.definition || "")}</pre></div>`;
+      const m = openModal({
+        title: f.name, subtitle: "عرض فقط — للتعديل لازم SQL migration مراجَعة", icon: "ti-code", wide: true,
+        body, actionsLeadSpacer: true,
+        actions: [
+          { label: "نسخ SQL", variant: "btn-outline", icon: "ti-copy", onClick: () => copyToClipboard(f.definition || "") },
+          { label: "قفل", onClick: (close) => close() },
+        ],
+      });
+    }
+
+    fnSearch.addEventListener("input", renderFunctions);
+
+    await loadBots();
+  </script>
+</body>
+</html>

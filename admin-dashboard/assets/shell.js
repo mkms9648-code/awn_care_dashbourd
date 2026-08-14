@@ -12,6 +12,7 @@ const NAV = {
     { key: "viewas",        file: "view-as.html",       label: "تجربة الدكتور",     icon: "ti-eye" },
     { key: "conversations", file: "conversations.html", label: "المحادثات",         icon: "ti-message-circle" },
     { key: "assistant",     file: "assistant.html",     label: "مساعد المبيعات",    icon: "ti-sparkles" },
+    { key: "bots",          file: "bots.html",          label: "البرومبتات والأدوات", icon: "ti-robot" },
   ],
   fathi: [
     { key: "overview",      file: "overview.html",      label: "نظرة عامة",        icon: "ti-layout-dashboard" },
