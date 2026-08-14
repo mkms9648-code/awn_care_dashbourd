@@ -140,6 +140,7 @@
           ? { label: "إيقاف مؤقت", icon: "ti-player-pause", onClick: () => setStatus(d, "suspended") }
           : { label: "تفعيل", icon: "ti-player-play", onClick: () => setStatus(d, "active") },
         { label: "قنوات الدكتور", icon: "ti-plug", onClick: () => channelsModal(d) },
+        { label: "امسح ذاكرة المحادثة", icon: "ti-eraser", onClick: () => clearMemory(d) },
         { sep: true },
         { label: "إنهاء الخدمة", icon: "ti-user-off", danger: true, onClick: () => offboard(d) },
       ]);
@@ -182,6 +183,18 @@
       if (error) { toast(error.message, "error"); return; }
       toast(status === "active" ? "اتفعّل" : "اتوقف", "good");
       loadDoctors();
+    }
+
+    async function clearMemory(d) {
+      const ok = await confirmDialog({
+        title: "تصفير ذاكرة المحادثة؟", icon: "ti-eraser", danger: true,
+        confirmLabel: "امسح الذاكرة",
+        message: `هيتمسح كل اللي البوت "فاكره" من محادثات «${d.full_name}» (الطوارئ/الراوند/العيادة حسب قنواته) — بيانات المرضى والحالات مش هتتأثر خالص، ده بس تاريخ الشات. المحادثة في التطبيق هتفضى وتبدأ من جديد.`,
+      });
+      if (!ok) return;
+      const { data, error } = await sb.rpc("admin_clear_doctor_memory", { p_staff_id: d.staff_id });
+      if (error) { toast(error.message, "error"); return; }
+      toast(`اتمسحت الذاكرة (${data.deleted_messages} رسالة)`, "good");
     }
 
     async function offboard(d) {
