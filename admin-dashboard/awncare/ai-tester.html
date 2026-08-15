@@ -26,6 +26,8 @@
     .btn-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
     #transcript { max-height: 56vh; overflow-y: auto; padding: 18px 20px; display: flex; flex-direction: column; background: var(--paper); border-radius: 12px; border: 1px solid var(--rule); }
     .bubble-system { align-self: center; background: var(--white); border: 1px dashed var(--rule); color: var(--grey-1); font-size: 0.8em; box-shadow: none; text-align: center; max-width: 80%; }
+    .bubble-flag { align-self: center; background: var(--critical-bg); border: 1px solid var(--critical-border); color: var(--critical); font-size: 0.82em; font-weight: 600; box-shadow: none; text-align: center; max-width: 85%; }
+    .flag-pill { display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; border-radius: 100px; font-size: 0.8em; font-weight: 700; background: var(--critical-bg); color: var(--critical); border: 1px solid var(--critical-border); }
     .warn-box { background: var(--warn-bg); color: var(--warn); border: 1px solid var(--warn-border); border-radius: 10px; padding: 10px 14px; font-size: .85em; margin-bottom: 14px; }
     .transcript-head { display: flex; align-items: center; gap: 10px; margin: 22px 0 10px; }
     .transcript-head h3 { margin: 0; font-size: 1em; color: var(--ink-strong); }
@@ -69,7 +71,9 @@
                 <button class="btn btn-neutral" id="save-btn"><i class="ti ti-device-floppy"></i> حفظ الشخصية</button>
                 <button class="btn" id="start-btn"><i class="ti ti-player-play"></i> ابدأ الاختبار</button>
                 <button class="btn btn-danger" id="stop-btn" disabled><i class="ti ti-player-stop"></i> إيقاف</button>
+                <button class="btn btn-outline" id="export-btn"><i class="ti ti-file-text"></i> تصدير تقرير</button>
                 <span class="status-pill" id="status-pill">جاهز</span>
+                <span class="flag-pill" id="flag-pill" style="display:none"><i class="ti ti-flag-2"></i> <span id="flag-count">0</span></span>
               </div>
             </div>
           </div>
@@ -84,11 +88,12 @@
   </div>
 
   <script type="module">
-    import { client, requireAdmin, applyProductTheme, escapeHtml, productConfig } from "../assets/core.js";
+    import { client, anonClient, requireAdmin, applyProductTheme, escapeHtml, productConfig } from "../assets/core.js";
     import { renderShell } from "../assets/shell.js";
     import { openModal, confirmDialog, toast, busy } from "../assets/ui.js";
 
     const PRODUCT = "awncare";
+    const PLATFORM = "mobile"; // نفس القيمة اللي التطبيق الحقيقي بيبعتها لـ app_* RPCs
     applyProductTheme(PRODUCT);
     const session = await requireAdmin();
     if (!session) throw new Error("not authorized");
@@ -127,7 +132,15 @@
     let activeBotKey = "ed";
     let personaCache = {};       // bot_key -> row from admin_list_test_personas (+ merged persona_prompt once fetched)
     let workspacesCache = null;  // lazy-loaded on first identity modal open
-    let run = { status: "idle", runToken: 0, turn: 0, history: [], abortCtrl: null };
+    let run = { status: "idle", runToken: 0, turn: 0, history: [], abortCtrl: null, log: [], flags: [], meta: null };
+    const flagPill = document.getElementById("flag-pill");
+    const flagCountEl = document.getElementById("flag-count");
+    const exportBtn = document.getElementById("export-btn");
+    function updateFlagPill() {
+      const n = run.flags.length;
+      flagPill.style.display = n ? "" : "none";
+      flagCountEl.textContent = String(n);
+    }
 
     function botLabel(k) { return BOT_LABELS[k] || { name: k, icon: "ti-robot" }; }
 
@@ -326,17 +339,52 @@
     });
 
     // ============================================================
+    // قائمة المرضى الحقيقيين (عشان التستر يتابع نفس الحالات بين البوتات
+    // بدل ما يخترع مريض مالوش وجود، ونفس المنطق بيمنعه يكرر تسجيل حالة مفتوحة)
+    // ============================================================
+    async function fetchRoster(botKey, chatId) {
+      const { data, error } = await anonClient(PRODUCT).rpc("app_encounter_list", {
+        p_platform: PLATFORM, p_bot_key: botKey, p_chat_id: chatId, p_filter: "all", p_category: null,
+      });
+      if (error) return { text: "", rows: [] };
+      const rows = (data && data.results) || [];
+      if (!rows.length) return { text: "", rows: [] };
+      const lines = rows.slice(0, 30).map((r, i) => {
+        const bits = [r.patient || "بدون اسم"];
+        if (r.unit) bits.push(r.unit);
+        const ticket = r.handle ? String(r.handle).replace(/^t:/, "") : "";
+        if (ticket) bits.push("تذكرة #" + ticket);
+        if (r.days_open != null) bits.push("يوم " + r.days_open + " من المتابعة");
+        return (i + 1) + ") " + bits.join(" — ");
+      });
+      return { text: lines.join("\n"), rows };
+    }
+    function rosterInstruction(botKey, rosterText) {
+      if (!rosterText) {
+        return botKey === "ed" ? "" :
+          "\n\nملحوظة مهمة: مفيش مرضى مسجلين فعليًا تحت متابعتك دلوقتي في البوت ده — لو محتاج تتابع حالة، قول إنه مفيش حالات وابدأ END_TEST بدل ما تخترع مريض.";
+      }
+      if (botKey === "ed") {
+        return "\n\n=== حالات مفتوحة عندك فعليًا في الطوارئ دلوقتي (لو حابب تكمل متابعة واحدة منهم بدل تسجيل جديد) ===\n" +
+          rosterText + "\n=== لو هتسجل حالة جديدة خالص، ماتكررش واحد من دول. ===";
+      }
+      return "\n\n=== المرضى المسجلين فعليًا تحت متابعتك دلوقتي (دول الحقيقيين بس، جايين من قاعدة البيانات) ===\n" +
+        rosterText + "\n=== اختار واحد بس من القائمة دي في كل مرة، وابدأ متابعته بالاسم/التذكرة المكتوبين بالظبط. ممنوع تمامًا تخترع مريض مش موجود في القائمة دي. ===";
+    }
+
+    // ============================================================
     // نسخة المحادثة الحية
     // ============================================================
     function clearTranscript() { transcriptEl.innerHTML = ""; }
     function nowTimeStr() { return new Date().toLocaleTimeString("ar-EG", { hour: "numeric", minute: "2-digit" }); }
     function addBubble(role, text) {
       const el = document.createElement("div");
-      el.className = "bubble " + (role === "bot" ? "bubble-ai" : role === "system" ? "bubble-system" : "bubble-human");
+      el.className = "bubble " + (role === "bot" ? "bubble-ai" : role === "system" ? "bubble-system" : role === "flag" ? "bubble-flag" : "bubble-human");
       const t = document.createElement("div");
       t.className = "bubble-text"; t.dir = "auto"; t.textContent = text || "";
       el.appendChild(t);
-      if (role !== "system") {
+      run.log.push({ turn: run.turn, role, text: text || "", time: new Date().toISOString() });
+      if (role !== "system" && role !== "flag") {
         const time = document.createElement("div");
         time.className = "bubble-time"; time.textContent = (role === "bot" ? "البوت الحقيقي" : "الدكتور المختبِر") + " · " + nowTimeStr();
         el.appendChild(time);
@@ -369,9 +417,13 @@
     }
 
     function parseTesterReply(raw) {
-      const s = String(raw || "");
+      let s = String(raw || "");
       const isEnd = /END_TEST/i.test(s);
-      return { text: s.replace(/END_TEST/gi, "").trim(), isEnd };
+      s = s.replace(/END_TEST/gi, "");
+      let flag = null;
+      const m = s.match(/^\s*\[FLAG:\s*([^\]]+)\]\s*\n?/i);
+      if (m) { flag = m[1].trim(); s = s.slice(m[0].length); }
+      return { text: s.trim(), isEnd, flag };
     }
 
     async function callTester(payload, signal) {
@@ -428,7 +480,12 @@
         typing1.remove();
         if (run.runToken !== myToken) return;
 
-        const { text, isEnd } = parseTesterReply(testerRaw);
+        const { text, isEnd, flag } = parseTesterReply(testerRaw);
+        if (flag) {
+          run.flags.push({ turn: run.turn, reason: flag });
+          updateFlagPill();
+          addBubble("flag", "🚩 ملاحظة على رد البوت: " + flag);
+        }
         if (isEnd) { finish("completed"); return; }
         if (!text) { finish("error", new Error("رد فاضي من التستر")); return; }
         addBubble("tester", text);
@@ -484,11 +541,17 @@
           await sb.rpc("admin_set_test_persona", { p_bot_key: botKey, p_persona_prompt: personaTextEl.value, p_test_chat_id: chatId });
         }
 
+        const roster = await fetchRoster(botKey, chatId);
+        const effectiveSystemPrompt = personaTextEl.value + rosterInstruction(botKey, roster.text);
+
         const effectiveMax = Math.max(1, Math.min(HARD_TURN_CAP, Number(maxTurnsEl.value) || 150));
         const lbl = botLabel(botKey);
         const wsLabel = p.test_workspace_name ? `${p.test_workspace_name}${p.test_org_name ? " — " + p.test_org_name : ""}` : "—";
         const willClear = clearMemoryChk.checked;
-        const msg = `هيبدأ اختبار آلي على بوت «${lbl.name}» جوّه مساحة العمل «${wsLabel}»، بشخصية الدكتور «${doc.full_name}» (كود ${chatId}). الرسايل دي هتتسجّل فعليًا وهتظهر في صفحة «المحادثات».${willClear ? " هيتمسح تاريخ البوت لهذا الدكتور قبل البدء (كل البوتات مش بس ده)." : ""} الحد الأقصى: ${effectiveMax} رسالة (سقف أمان ${HARD_TURN_CAP}).`;
+        const rosterNote = botKey === "ed"
+          ? ` لقيت ${roster.rows.length} حالة مفتوحة فعليًا تحت اسمه دلوقتي في الطوارئ — مش هيكررهم، بس هيسجل حالات جديدة زي المطلوب.`
+          : ` لقيت ${roster.rows.length} مريض مسجّل فعليًا تحت متابعته دلوقتي — هيتابع معاهم بس، من غير اختراع مرضى وهميين.`;
+        const msg = `هيبدأ اختبار آلي على بوت «${lbl.name}» جوّه مساحة العمل «${wsLabel}»، بشخصية الدكتور «${doc.full_name}» (كود ${chatId}). الرسايل دي هتتسجّل فعليًا وهتظهر في صفحة «المحادثات».${rosterNote}${willClear ? " هيتمسح تاريخ البوت لهذا الدكتور قبل البدء (كل البوتات مش بس ده)." : ""} الحد الأقصى: ${effectiveMax} رسالة (سقف أمان ${HARD_TURN_CAP}).`;
         const ok = await confirmDialog({ title: "تأكيد بدء الاختبار", message: msg, confirmLabel: "ابدأ", icon: "ti-player-play" });
         if (!ok) return;
 
@@ -502,11 +565,15 @@
         run.turn = 0;
         run.history = [{ role: "user", content: "ابدأ" }];
         run.lastBotMessage = "";
+        run.log = [];
+        run.flags = [];
+        run.meta = { botKey, botLabel: lbl.name, docName: doc.full_name, chatId, wsLabel };
+        updateFlagPill();
         run.abortCtrl = new AbortController();
         run.runToken++;
         setUiRunning(true);
         updateStatus(effectiveMax);
-        runLoop(run.runToken, botKey, chatId, personaTextEl.value, effectiveMax);
+        runLoop(run.runToken, botKey, chatId, effectiveSystemPrompt, effectiveMax);
       } finally {
         startPreparing = false;
         restore();
@@ -519,6 +586,46 @@
       run.abortCtrl?.abort();
       run.runToken++;
       finish("stopped");
+    });
+
+    // ============================================================
+    // تصدير المحادثة كتقرير نصي
+    // ============================================================
+    function buildReportText() {
+      const meta = run.meta || {};
+      const lines = [];
+      lines.push("تقرير اختبار الذكاء الاصطناعي — " + (meta.botLabel || botLabel(activeBotKey).name));
+      lines.push("التاريخ: " + new Date().toLocaleString("ar-EG"));
+      lines.push("الدكتور التجريبي: " + (meta.docName || "—") + (meta.chatId ? " (" + meta.chatId + ")" : ""));
+      lines.push("مساحة العمل: " + (meta.wsLabel || "—"));
+      lines.push("عدد الرسايل: " + run.log.length);
+      lines.push("عدد الملاحظات المرصودة: " + run.flags.length);
+      lines.push("");
+      if (run.flags.length) {
+        lines.push("=== الملاحظات المرصودة ===");
+        run.flags.forEach((f) => lines.push("- (بعد الرسالة رقم " + f.turn + ") " + f.reason));
+        lines.push("");
+      }
+      lines.push("=== نص المحادثة ===");
+      run.log.forEach((e) => {
+        const who = e.role === "bot" ? "البوت الحقيقي" : e.role === "tester" ? "الدكتور المختبِر" : e.role === "flag" ? "🚩 ملاحظة" : "النظام";
+        lines.push("[" + e.turn + "] " + who + ": " + e.text);
+      });
+      return lines.join("\n");
+    }
+    exportBtn.addEventListener("click", () => {
+      if (!run.log.length) { toast("مفيش محادثة لسه عشان تتصدّر", "error"); return; }
+      const text = buildReportText();
+      const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "ai-tester-" + (run.meta?.botKey || activeBotKey) + "-" + Date.now() + ".txt";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 2000);
+      toast("اتصدّر التقرير", "good");
     });
 
     await loadPersonaList();

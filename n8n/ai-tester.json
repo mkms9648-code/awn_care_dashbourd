@@ -12,18 +12,24 @@
       "name": "Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [0, 0],
+      "position": [
+        0,
+        0
+      ],
       "webhookId": "ai-tester"
     },
     {
       "parameters": {
-        "jsCode": "const body = $('Webhook').first().json.body || {};\nconst suffix = \"\\n\\nتعليمات صارمة: رد فقط بالرسالة اللي هيكتبها الدكتور نفسه، من غير أي شرح أو تعليق أو Markdown أو علامات اقتباس. لو الاختبار خلص فعلاً اكتب END_TEST بس ومفيش حاجة تانية.\";\nconst system = String(body.system_prompt || '') + suffix;\n\nconst contents = [];\nfor (const h of (body.history || [])) {\n  contents.push({ role: h.role === 'assistant' ? 'model' : 'user', parts: [{ text: String(h.content || '') }] });\n}\nif (contents.length === 0) {\n  contents.push({ role: 'user', parts: [{ text: String(body.message || 'ابدأ') }] });\n}\n\nreturn [{ json: { geminiBody: {\n  system_instruction: { parts: [{ text: system }] },\n  contents,\n  generationConfig: { temperature: 0.9 }\n} } }];"
+        "jsCode": "const body = $('Webhook').first().json.body || {};\nconst suffix = \"\\n\\nتعليمات صارمة لازم تتبعها بالظبط:\\n\" +\n  \"1) كمّل تلعب دور الدكتور الحقيقي بنفس أسلوب كتابته على الموبايل وقت الشغل: عربي طبيعي وسريع، جمل قصيرة أحيانًا، من غير رسمية زيادة أو تقرير منمّق.\\n\" +\n  \"2) اختبر البوت بجدية زي مراجعة حقيقية: اسأل متابعة لو رده كان عام أو ناقص، وراقب التفاصيل اللي انت نفسك ذكرتها قبل كده — لو البوت نسيها أو تجاهلها ده أهم حاجة تمسكها.\\n\" +\n  \"3) لو حسيت إن رد البوت اللي فات فيه مشكلة فعلية (اتجاهل معلومة قلتهالك، رد غير منطقي طبيًا، ناقض نفسه، عمل حاجة غلط، أو تجاهل تعليمات واضحة) ابدأ ردك بسطر لوحده بالظبط كده: [FLAG: وصف مختصر جدًا للمشكلة] وبعدين كمّل ردك العادي في سطر جديد. متستخدمش [FLAG] إلا وانت متأكد فعلاً إن فيه مشكلة.\\n\" +\n  \"4) رد فقط بالرسالة اللي هيكتبها الدكتور (زائد سطر [FLAG] لو محتاج) — من غير أي شرح أو تعليق أو Markdown أو علامات اقتباس.\\n\" +\n  \"5) لو الاختبار خلص فعلاً اكتب END_TEST وحده من غير أي كلام قبله أو بعده.\";\nconst system = String(body.system_prompt || '') + suffix;\n\nconst contents = [];\nfor (const h of (body.history || [])) {\n  contents.push({ role: h.role === 'assistant' ? 'model' : 'user', parts: [{ text: String(h.content || '') }] });\n}\nif (contents.length === 0) {\n  contents.push({ role: 'user', parts: [{ text: String(body.message || 'ابدأ') }] });\n}\n\nreturn [{ json: { geminiBody: {\n  system_instruction: { parts: [{ text: system }] },\n  contents,\n  generationConfig: { temperature: 0.95 }\n} } }];"
       },
       "id": "c3a3a333-3333-4333-8333-333333333333",
       "name": "Build Gemini Request",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [220, 0]
+      "position": [
+        220,
+        0
+      ]
     },
     {
       "parameters": {
@@ -32,7 +38,10 @@
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "Content-Type", "value": "application/json" }
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
           ]
         },
         "sendBody": true,
@@ -44,7 +53,10 @@
       "name": "Gemini",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [440, 0]
+      "position": [
+        440,
+        0
+      ]
     },
     {
       "parameters": {
@@ -56,14 +68,49 @@
       "name": "Respond",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [660, 0]
+      "position": [
+        660,
+        0
+      ]
     }
   ],
   "connections": {
-    "Webhook": { "main": [[{ "node": "Build Gemini Request", "type": "main", "index": 0 }]] },
-    "Build Gemini Request": { "main": [[{ "node": "Gemini", "type": "main", "index": 0 }]] },
-    "Gemini": { "main": [[{ "node": "Respond", "type": "main", "index": 0 }]] }
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Build Gemini Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Gemini Request": {
+      "main": [
+        [
+          {
+            "node": "Gemini",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini": {
+      "main": [
+        [
+          {
+            "node": "Respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
   },
-  "settings": { "executionOrder": "v1" },
+  "settings": {
+    "executionOrder": "v1"
+  },
   "pinData": {}
 }
