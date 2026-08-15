@@ -20,7 +20,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const body = $('Webhook').first().json.body || {};\nconst system = String(body.system_prompt || '');\n\nconst contents = [];\nfor (const h of (body.history || [])) {\n  contents.push({ role: h.role === 'assistant' ? 'model' : 'user', parts: [{ text: String(h.content || '') }] });\n}\nif (contents.length === 0) {\n  contents.push({ role: 'user', parts: [{ text: String(body.message || 'ابدأ') }] });\n}\n\nreturn [{ json: { geminiBody: {\n  system_instruction: { parts: [{ text: system }] },\n  contents,\n  generationConfig: { temperature: 0.95 }\n} } }];"
+        "jsCode": "const body = $('Webhook').first().json.body || {};\nconst system = String(body.system_prompt || '');\n\nconst contents = [];\nfor (const h of (body.history || [])) {\n  contents.push({ role: h.role === 'assistant' ? 'model' : 'user', parts: [{ text: String(h.content || '') }] });\n}\nif (contents.length === 0) {\n  contents.push({ role: 'user', parts: [{ text: String(body.message || 'ابدأ') }] });\n}\n\nreturn [{ json: { geminiBody: {\n  system_instruction: { parts: [{ text: system }] },\n  contents,\n  generationConfig: { temperature: 0.95, maxOutputTokens: 1024 }\n} } }];"
       },
       "id": "c3a3a333-3333-4333-8333-333333333333",
       "name": "Build Gemini Request",
@@ -47,7 +47,9 @@
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify($json.geminiBody) }}",
-        "options": {}
+        "options": {
+          "timeout": 30000
+        }
       },
       "id": "c4a4a444-4444-4444-8444-444444444444",
       "name": "Gemini",
@@ -56,7 +58,8 @@
       "position": [
         440,
         0
-      ]
+      ],
+      "onError": "continueErrorOutput"
     },
     {
       "parameters": {
@@ -71,6 +74,21 @@
       "position": [
         660,
         0
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ reply: 'END_TEST' }) }}",
+        "options": {}
+      },
+      "id": "c6a6a666-6666-4666-8666-666666666666",
+      "name": "Respond Timeout",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        660,
+        140
       ]
     }
   ],
@@ -102,6 +120,13 @@
         [
           {
             "node": "Respond",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Timeout",
             "type": "main",
             "index": 0
           }

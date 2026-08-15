@@ -462,9 +462,13 @@
       return { text: s.trim(), isEnd, flag };
     }
 
+    const CALL_TIMEOUT_MS = 60000; // سقف 60 ثانية لكل نداء — لو n8n/Gemini واقف أو بطيء، منستناش للأبد
+    function withTimeout(signal) {
+      return typeof AbortSignal.any === "function" ? AbortSignal.any([signal, AbortSignal.timeout(CALL_TIMEOUT_MS)]) : signal;
+    }
     async function callTester(payload, signal) {
       const res = await fetch(cfg.AI_TESTER_ENDPOINT, {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload), signal,
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload), signal: withTimeout(signal),
       });
       if (!res.ok) throw new Error("HTTP " + res.status + " من التستر");
       const data = await res.json().catch(() => ({}));
@@ -473,7 +477,7 @@
     async function callRealBot(botKey, chatId, text, signal) {
       const res = await fetch(`${cfg.N8N_BASE_URL}/webhook/${botKey}-mobile`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ chat_id: chatId, bot_key: botKey, type: "text", text }), signal,
+        body: JSON.stringify({ chat_id: chatId, bot_key: botKey, type: "text", text }), signal: withTimeout(signal),
       });
       const txt = await res.text();
       let d; try { d = JSON.parse(txt); } catch { d = { reply_text: txt }; }
@@ -526,7 +530,10 @@
           testerRaw = await callTester({ system_prompt: systemPrompt, message: run.lastBotMessage || "", history: run.history }, run.abortCtrl.signal);
         } catch (e) {
           typing1.remove();
-          if (e.name === "AbortError") finish("stopped"); else finish("error", e);
+          if (e.name === "AbortError") {
+            if (run.abortCtrl.signal.aborted) finish("stopped");
+            else finish("error", new Error("التستر مارجّعش رد خلال 60 ثانية — راجع تنفيذ نود Gemini في n8n (ممكن يكون واقف أو المفتاح غلط)."));
+          } else finish("error", e);
           return;
         }
         typing1.remove();
@@ -551,7 +558,10 @@
           botReply = await callRealBot(botKey, chatId, text, run.abortCtrl.signal);
         } catch (e) {
           typing2.remove();
-          if (e.name === "AbortError") finish("stopped"); else finish("error", e);
+          if (e.name === "AbortError") {
+            if (run.abortCtrl.signal.aborted) finish("stopped");
+            else finish("error", new Error("البوت الحقيقي مارجّعش رد خلال 60 ثانية — راجع تنفيذ الفلو في n8n."));
+          } else finish("error", e);
           return;
         }
         typing2.remove();
