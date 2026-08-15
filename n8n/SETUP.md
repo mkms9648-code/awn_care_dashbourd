@@ -108,3 +108,78 @@ Request وتلصق الكود الجديد يدويًا) عشان تاخد ال�
 إنها تجريبية (زي "AI QA Tester — طوارئ") عشان محدش يتلخبط بيها لاحقًا، ومتربطش
 نفس الدكتور بأكتر من بوت لو مهتم إنك تمسح ذاكرته قبل كل اختبار — المسح بيمسح
 ذاكرة كل البوتات اللي عنده مع بعض، مش بوت واحد بس.
+
+## محلل السبب الجذري (Root Cause Analyzer)
+
+بعد ما اختبار يخلص وييجي فيه ملاحظات، تاب "اختبار الذكاء الاصطناعي" بيعرض
+زرار **"تحليل الأسباب الجذرية"** — بينادي على الـ webhook ده لكل ملاحظة، وبيرجّع
+تصنيف السبب + دليل + أول نقطة انحراف داخل الفلو، جاهز للتصدير كتقرير هندسي.
+
+### عقد الاتصال (Contract)
+
+**الطلب**:
+```json
+{
+  "bot_key": "ed | round | clinic",
+  "scenario": "وصف السيناريو المختبَر",
+  "flag_reason": "سبب الملاحظة من التستر",
+  "conversation_excerpt": [ {"role":"tester|bot","content":"…"} ],
+  "known_facts": {
+    "is_agent_error_detected": true,
+    "n8n_execution_id": "…او null",
+    "n8n_workflow_id": "…"
+  }
+}
+```
+**الرد**: كائن JSON واحد بالشكل `{severity, category, expected_behavior,
+actual_behavior, first_divergence_stage, first_divergence_node,
+root_cause_explanation, evidence:[…], downstream_impact,
+recommended_investigation, recommended_fix, confidence}`.
+
+### الخطوات
+1. **استورد** `root-cause-analyzer.json`. الفلو: `Webhook → Build RCA Request
+   (Code) → Gemini (HTTP) → Parse RCA Response (Code) → Respond`.
+2. **مفتاح Gemini**: نفس الخطوة المعتادة في نود **Gemini**.
+3. **فعّل**، وحط الـ Production URL في `config.js` تحت
+   `PRODUCTS.awncare.ROOT_CAUSE_ENDPOINT`.
+4. `sql/044_qa_workflow_system.sql` لازم يكون شغّال الأول (بيخزّن نتيجة
+   التحليل في `qa_root_cause_analyses`).
+
+### أمانة التحليل
+البرومبت متعمول عشان **يفرّق بوضوح** بين استنتاج مبني على دليل مؤكد (زي اكتشاف
+نص خطأ الوكيل الثابت — ده دليل 100%) واستنتاج مبني على قراءة نص المحادثة بس
+(من غير بيانات تنفيذ حقيقية) — وفي الحالة التانية بيقلل الـ confidence ويقول
+صراحة إنه معندوش دليل تنفيذ موثّق، بدل ما يخترع أسماء nodes أو أدوات مش متأكد
+منها. قايمة الأدوات الحقيقية لكل بوت (ed/round/clinic) متحطوطة جوّه نود Build
+RCA Request نفسه (مش مخترعة) — مأخوذة من ملفات n8n الحقيقية بتاعتك.
+
+## تتبّع تفاصيل التنفيذ (Execution Detail Proxy)
+
+ده الجزء اللي بيديك تفاصيل جوّة تنفيذ n8n نفسه (مدخلات/مخرجات كل node، محاولات
+استدعاء الأدوات، نص الـ error الحقيقي) — مش مجرد رقم execution_id. **محتاج منك
+خطوة إعداد إضافية واحدة عشان يشتغل.**
+
+### الخطوات
+1. **ولّد مفتاح API من n8n نفسه**: من إعدادات حسابك في n8n (Settings → n8n API
+   → Create an API key)، انسخ المفتاح.
+2. **استورد** `execution-detail-proxy.json`. الفلو: `Webhook → Get Execution
+   (HTTP، بيتصل بـ n8n API نفسه) → [نجاح] Curate Execution (Code) → Respond
+   Available / [فشل] Respond Unavailable`.
+3. افتح نود **Get Execution**، وفي خانة الـ Credential اعمل **New Credential**
+   من نوع **Header Auth**: الاسم `X-N8N-API-KEY`، والقيمة هي المفتاح اللي
+   ولّدته في الخطوة 1. المفتاح بيتخزن جوّه n8n بس — مش بيوصل للوحة أو المتصفح
+   خالص، زي مفتاح Gemini بالظبط.
+4. تأكد إن رابط `https://n8n-c1bz.srv1841520.hstgr.cloud` جوّه نود **Get
+   Execution** مطابق فعليًا لعنوان نسخة n8n بتاعتك (لو مختلف، عدّله فيه).
+5. **فعّل** الـ workflow، وحط الـ Production URL في `config.js` تحت
+   `PRODUCTS.awncare.EXECUTION_DETAIL_ENDPOINT`.
+6. مهم: لازم إعداد **"Save manual executions"/"Save execution progress"**
+   يكون مفعّل على الفلوز الحقيقية (ed/round/clinic mobile) عشان n8n يحتفظ
+   بتفاصيل الـ execution أصلًا — من غيره الـ API هيرجّع تنفيذ من غير بيانات
+   حتى لو المفتاح صحيح.
+
+### ملاحظة صراحة مهمة
+لسه معملتش اختبار حي لشكل بيانات الـ execution الحقيقي من نسخة n8n بتاعتك —
+الكود اللي بيقرا `runData` مبني على الشكل الموثّق المعتاد لـ n8n، لكن لو لقيت
+`structure_unrecognized: true` في الرد، معناه الشكل الفعلي مختلف شوية، وهيبان
+لك الـ raw payload بدل ما يتخفى — قولّي وقتها أظبطه على الشكل الحقيقي.

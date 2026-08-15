@@ -28,6 +28,12 @@ window.APP_CONFIG = {
       // ويب-هوك اختبار الذكاء الاصطناعي (n8n): بياخد {system_prompt,message,history}
       // ويرجّع {reply} — دكتور مختبِر AI بيكلم بوتات ed/round/clinic الحقيقية.
       AI_TESTER_ENDPOINT: "https://n8n-c1bz.srv1841520.hstgr.cloud/webhook/ai-tester",
+      // ويب-هوك محلل السبب الجذري (n8n): بياخد تفاصيل ملاحظة + دليل معروف،
+      // ويرجّع تصنيف السبب + الدليل + أول نقطة انحراف — لتقرير Claude Code.
+      ROOT_CAUSE_ENDPOINT: "https://n8n-c1bz.srv1841520.hstgr.cloud/webhook/root-cause-analyzer",
+      // ويب-هوك تفاصيل تنفيذ n8n (proxy): بياخد {execution_id}، وبينادي على
+      // n8n API نفسه (المفتاح مخزّن جوّه n8n بس) ويرجّع تفاصيل الـ nodes/الأدوات.
+      EXECUTION_DETAIL_ENDPOINT: "https://n8n-c1bz.srv1841520.hstgr.cloud/webhook/execution-detail-proxy",
     },
     fathi: {
       label: "فتحي ميزانية",

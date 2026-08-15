@@ -83,6 +83,7 @@
           <h3>المحادثة المباشرة</h3>
         </div>
         <div id="transcript"><div class="empty-state">لسه مفيش اختبار اتشغّل. دوس «ابدأ الاختبار» عشان تتفرج.</div></div>
+        <div id="run-link"></div>
       </div>
     </main>
   </div>
@@ -375,7 +376,8 @@
     // ============================================================
     // نسخة المحادثة الحية
     // ============================================================
-    function clearTranscript() { transcriptEl.innerHTML = ""; }
+    const runLinkEl = document.getElementById("run-link");
+    function clearTranscript() { transcriptEl.innerHTML = ""; runLinkEl.innerHTML = ""; }
     function nowTimeStr() { return new Date().toLocaleTimeString("ar-EG", { hour: "numeric", minute: "2-digit" }); }
     function addBubble(role, text) {
       const el = document.createElement("div");
@@ -400,6 +402,40 @@
       transcriptEl.appendChild(el);
       transcriptEl.scrollTop = transcriptEl.scrollHeight;
       return el;
+    }
+
+    // ============================================================
+    // حفظ التشغيلة/الرسايل/الملاحظات في قاعدة البيانات (QA workflow system) —
+    // إضافي فوق التجربة الحية الموجودة أصلًا؛ أي فشل هنا بيتحمّل بصمت (console
+    // فقط) وما بيوقفش الاختبار الشغال، لأن التصدير النصي القديم لسه شغال
+    // بشكل مستقل من الذاكرة المحلية بغض النظر.
+    // ============================================================
+    async function persistTurn(role, text) {
+      const testRunId = run.meta && run.meta.testRunId;
+      if (!testRunId) return null;
+      try {
+        const { data, error } = await sb.rpc("admin_qa_log_message", {
+          p_test_run_id: testRunId, p_turn_no: run.turn, p_role: role, p_content: text || "",
+        });
+        if (error) throw new Error(error.message);
+        return data.id;
+      } catch (e) {
+        console.warn("QA persist message failed", e);
+        return null;
+      }
+    }
+    async function persistFlag(reason) {
+      const testRunId = run.meta && run.meta.testRunId;
+      if (!testRunId) return;
+      try {
+        const { error } = await sb.rpc("admin_qa_log_flag", {
+          p_test_run_id: testRunId, p_turn_no: run.turn, p_message_id: run.lastBotMessageId || null,
+          p_raw_flag_text: reason, p_scenario: null,
+        });
+        if (error) throw new Error(error.message);
+      } catch (e) {
+        console.warn("QA persist flag failed", e);
+      }
     }
 
     function setUiRunning(running) {
@@ -458,7 +494,23 @@
         "hard-cap": "الاختبار وقف — وصل لسقف الأمان (" + HARD_TURN_CAP + " رسالة).",
         error: "الاختبار وقف بسبب خطأ" + (err ? (": " + err.message) : "") + ".",
       };
-      addBubble("system", messages[reason] || reason);
+      const msg = messages[reason] || reason;
+      addBubble("system", msg);
+
+      const testRunId = run.meta && run.meta.testRunId;
+      if (!testRunId) return;
+      persistTurn("system", msg);
+      const statusMap = { stopped: "stopped", error: "error" };
+      const status = statusMap[reason] || (run.flags.length ? "failed" : "passed");
+      (async () => {
+        try {
+          await sb.rpc("admin_qa_finish_test_run", { p_test_run_id: testRunId, p_status: status, p_total_turns: run.turn, p_flag_counts: null });
+          await sb.rpc("admin_qa_correlate_executions", { p_test_run_id: testRunId });
+        } catch (e) {
+          console.warn("QA finish/correlate failed", e);
+        }
+        runLinkEl.innerHTML = `<a class="btn btn-outline btn-sm" href="qa-runs.html?run=${encodeURIComponent(testRunId)}"><i class="ti ti-clipboard-list"></i> افتح تقرير هذا الاختبار (${escapeHtml(testRunId)})</a>`;
+      })();
     }
 
     async function runLoop(myToken, botKey, chatId, systemPrompt, effectiveMax) {
@@ -485,10 +537,12 @@
           run.flags.push({ turn: run.turn, reason: flag });
           updateFlagPill();
           addBubble("flag", "🚩 ملاحظة على رد البوت: " + flag);
+          await persistFlag(flag);
         }
         if (isEnd) { finish("completed"); return; }
         if (!text) { finish("error", new Error("رد فاضي من التستر")); return; }
         addBubble("tester", text);
+        await persistTurn("tester", text);
         run.history.push({ role: "assistant", content: text });
 
         const typing2 = showTyping("bot");
@@ -504,6 +558,7 @@
         if (run.runToken !== myToken) return;
 
         addBubble("bot", botReply);
+        run.lastBotMessageId = await persistTurn("bot", botReply);
         run.history.push({ role: "user", content: botReply });
         run.lastBotMessage = botReply;
       }
@@ -560,14 +615,30 @@
           if (cErr) { toast(cErr.message, "error"); return; }
         }
 
+        let testRunId = null;
+        const parentTestRunId = consumeRegressionParent(botKey);
+        try {
+          const { data: runRow, error: runErr } = await sb.rpc("admin_qa_start_test_run", {
+            p_bot_key: botKey, p_test_staff_id: p.test_staff_id, p_test_chat_id: chatId,
+            p_workspace_id: p.test_workspace_id, p_persona_prompt: effectiveSystemPrompt,
+            p_max_turns: effectiveMax, p_parent_test_run_id: parentTestRunId,
+          });
+          if (runErr) throw new Error(runErr.message);
+          testRunId = runRow.test_run_id;
+        } catch (e) {
+          console.warn("QA start_test_run failed — continuing without persistence", e);
+          toast("تعذّر حفظ التشغيلة في السجل (الاختبار هيشتغل عادي، بس من غير تقرير محفوظ) — " + e.message, "error");
+        }
+
         clearTranscript();
         run.status = "running";
         run.turn = 0;
         run.history = [{ role: "user", content: "ابدأ" }];
         run.lastBotMessage = "";
+        run.lastBotMessageId = null;
         run.log = [];
         run.flags = [];
-        run.meta = { botKey, botLabel: lbl.name, docName: doc.full_name, chatId, wsLabel };
+        run.meta = { botKey, botLabel: lbl.name, docName: doc.full_name, chatId, wsLabel, testRunId };
         updateFlagPill();
         run.abortCtrl = new AbortController();
         run.runToken++;
@@ -628,8 +699,26 @@
       toast("اتصدّر التقرير", "good");
     });
 
+    // ============================================================
+    // متابعة regression جاي من صفحة سجل الاختبارات (qa-runs.html) — بيحدد
+    // التاب المناسب، وبيتم استهلاكه عند الضغط على "ابدأ" على نفس البوت
+    // (شايف داخل startBtn handler عن طريق consumeRegressionParent).
+    // ============================================================
+    function consumeRegressionParent(botKey) {
+      try {
+        const raw = sessionStorage.getItem("awn_qa_regression_parent");
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        sessionStorage.removeItem("awn_qa_regression_parent");
+        return parsed && parsed.botKey === botKey ? parsed.testRunId : null;
+      } catch {
+        return null;
+      }
+    }
+
     await loadPersonaList();
-    await renderTab("ed");
+    const initialBot = new URLSearchParams(location.search).get("bot");
+    await renderTab(BOT_KEYS.includes(initialBot) ? initialBot : "ed");
   </script>
 </body>
 </html>

@@ -1,0 +1,503 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>سجل اختبارات QA — عون كير</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css" />
+  <link rel="stylesheet" href="../assets/style.css" />
+  <script src="../config.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+  <style>
+    .btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
+    .run-summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-top: 14px; }
+    .run-stat { background: var(--paper); border: 1px solid var(--rule); border-radius: 10px; padding: 10px 14px; }
+    .run-stat .v { font-size: 1.3em; font-weight: 700; color: var(--ink-strong); }
+    .run-stat .l { font-size: 0.78em; color: var(--grey-2); margin-top: 2px; }
+    .flag-card { background: var(--white); border: 1px solid var(--rule); border-radius: 12px; padding: 16px; margin-bottom: 12px; }
+    .flag-card.sev-critical { border-inline-start: 4px solid var(--critical); }
+    .flag-card.sev-major { border-inline-start: 4px solid var(--warn); }
+    .flag-card.sev-minor { border-inline-start: 4px solid var(--grey-3); }
+    .flag-card.sev-unclassified { border-inline-start: 4px solid var(--grey-3); }
+    .flag-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+    .flag-head .fid { font-family: "IBM Plex Sans", monospace; direction: ltr; font-weight: 700; color: var(--ink-strong); }
+    .flag-section { margin-top: 10px; }
+    .flag-section .lbl2 { font-size: 0.76em; color: var(--grey-2); font-weight: 700; text-transform: uppercase; letter-spacing: .04em; margin-bottom: 3px; }
+    .flag-section .val { font-size: 0.9em; color: var(--ink); white-space: pre-wrap; }
+    .evidence-list { margin: 4px 0 0; padding-inline-start: 18px; font-size: 0.88em; }
+    .evidence-list li { margin-bottom: 3px; }
+    #run-transcript { max-height: 60vh; overflow-y: auto; padding: 18px 20px; display: flex; flex-direction: column; background: var(--paper); border-radius: 12px; }
+    .bubble-system { align-self: center; background: var(--white); border: 1px dashed var(--rule); color: var(--grey-1); font-size: 0.8em; box-shadow: none; text-align: center; max-width: 80%; }
+    .bubble-err-badge { display: inline-block; margin-top: 4px; font-size: 0.72em; color: var(--critical); font-weight: 700; }
+    .code-view { background: var(--paper); border: 1px solid var(--rule); border-radius: 10px; padding: 14px; max-height: 60vh; overflow: auto; }
+    .code-view pre { margin: 0; font-size: 0.8em; line-height: 1.6; white-space: pre-wrap; word-break: break-word; }
+  </style>
+</head>
+<body>
+  <div class="app-shell">
+    <aside id="app-nav"></aside>
+    <main class="main">
+      <div class="page">
+        <div class="page-head">
+          <div>
+            <h1>سجل اختبارات QA</h1>
+            <p class="subtitle">كل تشغيلات اختبار الذكاء الاصطناعي المحفوظة — افتح أي تشغيلة عشان تحلل أسباب المشاكل وتصدّر تقرير جاهز لـ Claude Code.</p>
+          </div>
+        </div>
+
+        <div id="list-view">
+          <div class="card"><div class="table-wrap" id="runs-table-wrap"><p class="muted">جاري التحميل…</p></div></div>
+        </div>
+
+        <div id="detail-view" style="display:none">
+          <button class="btn btn-neutral btn-sm" id="back-to-list" style="margin-bottom:14px"><i class="ti ti-arrow-right"></i> رجوع للقايمة</button>
+          <div class="card" id="run-header"></div>
+          <div class="btn-row" id="run-actions" style="margin:16px 0"></div>
+          <h3>الملاحظات</h3>
+          <div id="flags-wrap"></div>
+          <h3 style="margin-top:24px">نص المحادثة الكامل</h3>
+          <div id="run-transcript"><p class="muted">جاري التحميل…</p></div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script type="module">
+    import { client, requireAdmin, applyProductTheme, escapeHtml, fmtDate, productConfig, n8nExecutionUrl } from "../assets/core.js";
+    import { renderShell } from "../assets/shell.js";
+    import { openModal, confirmDialog, toast, busy } from "../assets/ui.js";
+
+    const PRODUCT = "awncare";
+    applyProductTheme(PRODUCT);
+    const session = await requireAdmin();
+    if (!session) throw new Error("not authorized");
+    renderShell(session, { product: PRODUCT, active: "qa-runs" });
+
+    const sb = client(PRODUCT);
+    const cfg = productConfig(PRODUCT);
+
+    const BOT_LABELS = {
+      ed: { name: "الطوارئ (Dash)", icon: "ti-ambulance" },
+      round: { name: "الراوند (Rounds)", icon: "ti-stethoscope" },
+      clinic: { name: "العيادة (Clinic)", icon: "ti-building-hospital" },
+    };
+    function botLabel(k) { return BOT_LABELS[k] || { name: k, icon: "ti-robot" }; }
+
+    const STATUS_PILL = {
+      running: { label: "شغّالة", cls: "pill-accent" },
+      passed: { label: "نجحت", cls: "pill-good" },
+      failed: { label: "فيها مشاكل", cls: "pill-critical" },
+      stopped: { label: "اتوقفت", cls: "pill-muted" },
+      error: { label: "خطأ", cls: "pill-critical" },
+    };
+    const SEV_PILL = {
+      critical: { label: "حرجة", cls: "pill-critical" },
+      major: { label: "متوسطة", cls: "pill-warning" },
+      minor: { label: "بسيطة", cls: "pill-muted" },
+      unclassified: { label: "لسه مش مصنّفة", cls: "pill-muted" },
+    };
+
+    const listView = document.getElementById("list-view");
+    const detailView = document.getElementById("detail-view");
+    const runsTableWrap = document.getElementById("runs-table-wrap");
+    const runHeaderEl = document.getElementById("run-header");
+    const runActionsEl = document.getElementById("run-actions");
+    const flagsWrapEl = document.getElementById("flags-wrap");
+    const transcriptEl = document.getElementById("run-transcript");
+
+    let currentRun = null; // last admin_qa_get_test_run() result
+
+    // ============================================================
+    // قايمة التشغيلات
+    // ============================================================
+    async function loadRunsList() {
+      runsTableWrap.innerHTML = `<p class="muted">جاري التحميل…</p>`;
+      const { data, error } = await sb.rpc("admin_qa_list_test_runs", { p_limit: 100 });
+      if (error) { runsTableWrap.innerHTML = `<p class="error-msg">${escapeHtml(error.message)}</p>`; return; }
+      const rows = data || [];
+      if (!rows.length) { runsTableWrap.innerHTML = `<div class="empty-state">مفيش تشغيلات اختبار محفوظة لسه. شغّل اختبار من صفحة «اختبار الذكاء الاصطناعي».</div>`; return; }
+      const table = document.createElement("table");
+      table.innerHTML = `<thead><tr>
+          <th>الكود</th><th>البوت</th><th>الحالة</th><th>الرسايل</th><th>الملاحظات</th><th>التاريخ</th><th></th>
+        </tr></thead><tbody></tbody>`;
+      const tbody = table.querySelector("tbody");
+      rows.forEach((r) => {
+        const st = STATUS_PILL[r.status] || { label: r.status, cls: "pill-muted" };
+        const lbl = botLabel(r.bot_key);
+        const tr = document.createElement("tr");
+        tr.style.cursor = "pointer";
+        tr.innerHTML = `
+          <td class="mono">${escapeHtml(r.test_run_id)}${r.parent_test_run_id ? `<div class="muted" style="font-size:.8em">regression لـ ${escapeHtml(r.parent_test_run_id)}</div>` : ""}</td>
+          <td><i class="ti ${lbl.icon}"></i> ${escapeHtml(lbl.name)}</td>
+          <td><span class="pill ${st.cls}">${st.label}</span></td>
+          <td class="num">${r.total_turns || 0}</td>
+          <td>${r.total_flags ? `${r.critical_flags ? `<span class="pill pill-critical">${r.critical_flags} حرجة</span> ` : ""}${r.major_flags ? `<span class="pill pill-warning">${r.major_flags} متوسطة</span> ` : ""}${r.minor_flags ? `<span class="pill pill-muted">${r.minor_flags} بسيطة</span> ` : ""}${(r.total_flags - r.critical_flags - r.major_flags - r.minor_flags) > 0 ? `<span class="pill pill-muted">${r.total_flags - r.critical_flags - r.major_flags - r.minor_flags} لسه مش مصنّفة</span>` : ""}` : `<span class="muted">—</span>`}</td>
+          <td class="muted">${fmtDate(r.started_at)}</td>
+          <td><i class="ti ti-chevron-left"></i></td>`;
+        tr.addEventListener("click", () => openRun(r.test_run_id));
+        tbody.appendChild(tr);
+      });
+      runsTableWrap.innerHTML = "";
+      runsTableWrap.appendChild(table);
+    }
+
+    // ============================================================
+    // تفصيل تشغيلة واحدة
+    // ============================================================
+    async function openRun(testRunId) {
+      history.replaceState(null, "", "?run=" + encodeURIComponent(testRunId));
+      listView.style.display = "none";
+      detailView.style.display = "";
+      runHeaderEl.innerHTML = `<p class="muted">جاري التحميل…</p>`;
+      flagsWrapEl.innerHTML = "";
+      transcriptEl.innerHTML = `<p class="muted">جاري التحميل…</p>`;
+      runActionsEl.innerHTML = "";
+
+      const { data, error } = await sb.rpc("admin_qa_get_test_run", { p_test_run_id: testRunId });
+      if (error) { runHeaderEl.innerHTML = `<p class="error-msg">${escapeHtml(error.message)}</p>`; return; }
+      currentRun = data;
+      renderRunHeader();
+      renderRunActions();
+      renderFlags();
+      renderTranscript();
+    }
+
+    function renderRunHeader() {
+      const r = currentRun;
+      const st = STATUS_PILL[r.status] || { label: r.status, cls: "pill-muted" };
+      const lbl = botLabel(r.bot_key);
+      runHeaderEl.innerHTML = `
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+          <div class="mono" style="font-weight:700;font-size:1.1em">${escapeHtml(r.test_run_id)}</div>
+          <span class="pill ${st.cls}">${st.label}</span>
+          <span class="muted"><i class="ti ${lbl.icon}"></i> ${escapeHtml(lbl.name)}</span>
+          ${r.parent_test_run_id ? `<span class="pill pill-accent">regression لـ ${escapeHtml(r.parent_test_run_id)}</span>` : ""}
+        </div>
+        <div class="muted" style="margin-top:8px">
+          الدكتور التجريبي: ${escapeHtml(r.test_doctor_name || "—")} (${escapeHtml(r.test_chat_id || "—")}) —
+          ${escapeHtml(r.workspace_name || "—")}${r.org_name ? " — " + escapeHtml(r.org_name) : ""}
+        </div>
+        <div class="run-summary-grid">
+          <div class="run-stat"><div class="v">${r.total_turns || 0}</div><div class="l">رسالة</div></div>
+          <div class="run-stat"><div class="v">${r.total_flags || 0}</div><div class="l">ملاحظة</div></div>
+          <div class="run-stat"><div class="v">${r.critical_flags || 0}</div><div class="l">حرجة</div></div>
+          <div class="run-stat"><div class="v">${r.major_flags || 0}</div><div class="l">متوسطة</div></div>
+          <div class="run-stat"><div class="v">${fmtDate(r.started_at)}</div><div class="l">بدأت</div></div>
+          <div class="run-stat"><div class="v">${r.ended_at ? fmtDate(r.ended_at) : "—"}</div><div class="l">خلصت</div></div>
+        </div>`;
+    }
+
+    function renderRunActions() {
+      runActionsEl.innerHTML = `
+        <button class="btn" id="analyze-all-btn"><i class="ti ti-brain"></i> تحليل الأسباب الجذرية لكل الملاحظات</button>
+        <button class="btn btn-outline" id="export-claude-btn"><i class="ti ti-package"></i> تصدير لـ Claude Code</button>
+        <button class="btn btn-neutral" id="regression-btn"><i class="ti ti-repeat"></i> شغّل اختبار مطابق (Regression)</button>`;
+      document.getElementById("analyze-all-btn").addEventListener("click", analyzeAllFlags);
+      document.getElementById("export-claude-btn").addEventListener("click", exportForClaudeCode);
+      document.getElementById("regression-btn").addEventListener("click", startRegression);
+    }
+
+    function messageById(id) { return (currentRun.messages || []).find((m) => m.id === id); }
+
+    function renderFlags() {
+      const flags = currentRun.flags || [];
+      if (!flags.length) { flagsWrapEl.innerHTML = `<div class="empty-state">مفيش ملاحظات في التشغيلة دي — البوت عدّى الاختبار من غير مشاكل مرصودة 🎉</div>`; return; }
+      flagsWrapEl.innerHTML = "";
+      flags.forEach((f) => flagsWrapEl.appendChild(flagCard(f)));
+    }
+
+    function flagCard(f) {
+      const sev = SEV_PILL[f.severity] || SEV_PILL.unclassified;
+      const rc = f.root_cause;
+      const msg = f.message_id ? messageById(f.message_id) : null;
+      const execUrl = msg ? n8nExecutionUrl(PRODUCT, msg.n8n_workflow_id, msg.n8n_execution_id) : null;
+      const el = document.createElement("div");
+      el.className = "flag-card sev-" + (f.severity || "unclassified");
+      el.innerHTML = `
+        <div class="flag-head">
+          <span class="fid">${escapeHtml(f.flag_id)}</span>
+          <span class="pill ${sev.cls}">${sev.label}</span>
+          <span class="pill pill-muted">${escapeHtml(f.category || "unknown")}</span>
+          ${msg && msg.is_agent_error ? `<span class="pill pill-critical"><i class="ti ti-bug"></i> فشل مؤكد في AI Agent</span>` : ""}
+        </div>
+        <div class="flag-section"><div class="lbl2">سبب الملاحظة (من التستر)</div><div class="val">${escapeHtml(f.raw_flag_text)}</div></div>
+        ${f.expected_behavior ? `<div class="flag-section"><div class="lbl2">المتوقع</div><div class="val">${escapeHtml(f.expected_behavior)}</div></div>` : ""}
+        ${f.actual_behavior ? `<div class="flag-section"><div class="lbl2">الفعلي</div><div class="val">${escapeHtml(f.actual_behavior)}</div></div>` : ""}
+        ${rc ? `
+          <div class="flag-section"><div class="lbl2">أول نقطة انحراف</div><div class="val">${escapeHtml(rc.first_divergence_stage || "—")} — ${escapeHtml(rc.first_divergence_node || "—")}</div></div>
+          <div class="flag-section"><div class="lbl2">السبب الجذري (ثقة ${Math.round((rc.confidence || 0) * 100)}%)</div><div class="val">${escapeHtml(rc.root_cause_explanation || "—")}</div></div>
+          ${Array.isArray(rc.evidence) && rc.evidence.length ? `<div class="flag-section"><div class="lbl2">الدليل</div><ul class="evidence-list">${rc.evidence.map((e) => `<li>${escapeHtml(String(e))}</li>`).join("")}</ul></div>` : ""}
+          ${rc.downstream_impact ? `<div class="flag-section"><div class="lbl2">الأثر</div><div class="val">${escapeHtml(rc.downstream_impact)}</div></div>` : ""}
+          ${rc.recommended_fix ? `<div class="flag-section"><div class="lbl2">الإصلاح المقترح</div><div class="val">${escapeHtml(rc.recommended_fix)}</div></div>` : ""}
+        ` : `<div class="hint" style="margin-top:8px">لسه ما اتحلّلش — دوس «حلّل الملاحظة دي» أو «تحليل الأسباب الجذرية لكل الملاحظات».</div>`}
+        <div class="btn-row" style="margin-top:12px">
+          <button class="btn btn-neutral btn-sm analyze-one-btn"><i class="ti ti-brain"></i> حلّل الملاحظة دي</button>
+          ${execUrl ? `<a class="btn btn-outline btn-sm" href="${execUrl}" target="_blank" rel="noopener"><i class="ti ti-git-branch"></i> عرض التنفيذ في n8n</a>` : `<span class="btn btn-neutral btn-sm" style="opacity:.5;cursor:default" title="مفيش execution_id متسجل لهذه الرسالة"><i class="ti ti-git-branch-off"></i> بدون تنفيذ مسجّل</span>`}
+          ${msg && msg.n8n_execution_id ? `<button class="btn btn-outline btn-sm exec-detail-btn"><i class="ti ti-list-details"></i> تفاصيل التنفيذ</button>` : ""}
+        </div>`;
+      el.querySelector(".analyze-one-btn").addEventListener("click", (e) => analyzeFlag(f, e.currentTarget));
+      const execBtn = el.querySelector(".exec-detail-btn");
+      if (execBtn) execBtn.addEventListener("click", () => showExecutionDetail(msg.n8n_execution_id));
+      return el;
+    }
+
+    function renderTranscript() {
+      const messages = currentRun.messages || [];
+      if (!messages.length) { transcriptEl.innerHTML = `<div class="empty-state">مفيش رسايل محفوظة لهذه التشغيلة.</div>`; return; }
+      transcriptEl.innerHTML = messages.map((m) => {
+        const cls = m.role === "bot" ? "bubble-ai" : m.role === "system" ? "bubble-system" : "bubble-human";
+        const who = m.role === "bot" ? "البوت الحقيقي" : m.role === "tester" ? "الدكتور المختبِر" : "النظام";
+        return `<div class="bubble ${cls}">
+            <div class="bubble-text" dir="auto">${escapeHtml(m.content)}</div>
+            <div class="bubble-time"><span>[${m.turn_no}] ${who} · ${fmtDate(m.occurred_at)}</span></div>
+            ${m.is_agent_error ? `<div class="bubble-err-badge"><i class="ti ti-bug"></i> فشل مؤكد في AI Agent</div>` : ""}
+          </div>`;
+      }).join("");
+    }
+
+    // ============================================================
+    // تحليل السبب الجذري
+    // ============================================================
+    function buildExcerpt(flag) {
+      const msgs = (currentRun.messages || []).filter((m) => m.role !== "system" && m.turn_no <= (flag.turn_no || Infinity));
+      return msgs.slice(-10).map((m) => ({ role: m.role, content: m.content }));
+    }
+
+    async function analyzeFlag(flag, btnEl) {
+      if (!cfg.ROOT_CAUSE_ENDPOINT) { toast("حط رابط محلل السبب الجذري في config.js الأول", "error"); return; }
+      const restore = btnEl ? busy(btnEl, "بيحلل…") : null;
+      try {
+        const msg = flag.message_id ? messageById(flag.message_id) : null;
+        const payload = {
+          bot_key: currentRun.bot_key,
+          scenario: flag.scenario || "",
+          flag_reason: flag.raw_flag_text,
+          conversation_excerpt: buildExcerpt(flag),
+          known_facts: {
+            is_agent_error_detected: !!(msg && msg.is_agent_error),
+            n8n_execution_id: msg ? msg.n8n_execution_id : null,
+            n8n_workflow_id: msg ? msg.n8n_workflow_id : null,
+          },
+        };
+        const res = await fetch(cfg.ROOT_CAUSE_ENDPOINT, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        const result = await res.json();
+
+        const { error: e1 } = await sb.rpc("admin_qa_update_flag_analysis", {
+          p_flag_id: flag.flag_id, p_severity: result.severity, p_category: result.category,
+          p_expected_behavior: result.expected_behavior, p_actual_behavior: result.actual_behavior,
+          p_confidence: result.confidence,
+        });
+        if (e1) throw new Error(e1.message);
+
+        const { error: e2 } = await sb.rpc("admin_qa_save_root_cause", {
+          p_flag_id: flag.flag_id, p_first_divergence_stage: result.first_divergence_stage,
+          p_first_divergence_node: result.first_divergence_node, p_root_cause_category: result.category,
+          p_root_cause_explanation: result.root_cause_explanation, p_evidence: result.evidence || [],
+          p_downstream_impact: result.downstream_impact, p_recommended_investigation: result.recommended_investigation,
+          p_recommended_fix: result.recommended_fix, p_confidence: result.confidence, p_raw_llm_response: result,
+        });
+        if (e2) throw new Error(e2.message);
+      } catch (err) {
+        toast("فشل تحليل " + flag.flag_id + ": " + err.message, "error");
+      } finally {
+        if (restore) restore();
+      }
+    }
+
+    async function analyzeAllFlags() {
+      const flags = (currentRun.flags || []).filter((f) => f.status === "open");
+      if (!flags.length) { toast("مفيش ملاحظات محتاجة تحليل", "error"); return; }
+      const ok = await confirmDialog({
+        title: "تحليل الأسباب الجذرية",
+        message: `هيتم نداء محلل الذكاء الاصطناعي ${flags.length} مرة (واحدة لكل ملاحظة مفتوحة) — كل نداء بيكلّف استدعاء Gemini. متابع؟`,
+        confirmLabel: "حلّل", icon: "ti-brain",
+      });
+      if (!ok) return;
+      const btn = document.getElementById("analyze-all-btn");
+      const restore = busy(btn, "0 / " + flags.length);
+      for (let i = 0; i < flags.length; i++) {
+        btn.innerHTML = `<i class="ti ti-loader-2 spin"></i> ${i + 1} / ${flags.length}`;
+        await analyzeFlag(flags[i], null);
+      }
+      restore();
+      toast("خلص التحليل", "good");
+      await openRun(currentRun.test_run_id);
+    }
+
+    // ============================================================
+    // تفاصيل التنفيذ (n8n execution-detail-proxy)
+    // ============================================================
+    async function showExecutionDetail(executionId) {
+      if (!cfg.EXECUTION_DETAIL_ENDPOINT) { toast("حط رابط تفاصيل التنفيذ في config.js الأول", "error"); return; }
+      const body = document.createElement("div");
+      body.innerHTML = `<div class="code-view"><pre class="mono">جاري الجلب…</pre></div>`;
+      openModal({ title: "تفاصيل التنفيذ", subtitle: executionId, icon: "ti-list-details", wide: true, body });
+      try {
+        const res = await fetch(cfg.EXECUTION_DETAIL_ENDPOINT, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ execution_id: executionId }) });
+        const data = await res.json();
+        body.querySelector("pre").textContent = JSON.stringify(data, null, 2);
+      } catch (err) {
+        body.querySelector("pre").textContent = "تعذّر الجلب: " + err.message;
+      }
+    }
+
+    // ============================================================
+    // Regression
+    // ============================================================
+    function startRegression() {
+      sessionStorage.setItem("awn_qa_regression_parent", JSON.stringify({ testRunId: currentRun.test_run_id, botKey: currentRun.bot_key }));
+      location.href = "ai-tester.html?bot=" + encodeURIComponent(currentRun.bot_key);
+    }
+
+    // ============================================================
+    // تصدير لـ Claude Code
+    // ============================================================
+    function buildReportMd() {
+      const r = currentRun;
+      const flags = r.flags || [];
+      const lines = [];
+      lines.push("# AI Workflow Test Report", "");
+      lines.push("- Test ID: " + r.test_run_id);
+      lines.push("- Target Workflow: " + botLabel(r.bot_key).name + " (bot_key: " + r.bot_key + ")");
+      lines.push("- Workflow ID: " + (r.n8n_workflow_id || "unknown - not captured for this run"));
+      lines.push("- Date: " + r.started_at);
+      lines.push("- Status: " + r.status.toUpperCase());
+      lines.push("");
+      lines.push("## Summary", "");
+      lines.push("- Total messages: " + r.total_turns);
+      lines.push("- Total flags: " + r.total_flags + " (critical: " + r.critical_flags + ", major: " + r.major_flags + ", minor: " + r.minor_flags + ")");
+      lines.push("");
+      lines.push("## Failed Tests", "");
+      flags.forEach((f) => lines.push("- " + f.flag_id + " [" + (f.severity || "unclassified") + "] " + f.raw_flag_text));
+      lines.push("");
+      lines.push("## Critical Failures", "");
+      flags.filter((f) => f.severity === "critical").forEach((f) => lines.push("- " + f.flag_id + ": " + (f.actual_behavior || f.raw_flag_text)));
+      lines.push("");
+      lines.push("## Root Cause Analysis", "");
+      flags.forEach((f) => {
+        lines.push("### " + f.flag_id);
+        lines.push("- Severity: " + (f.severity || "unclassified"));
+        lines.push("- Category: " + (f.category || "unknown"));
+        lines.push("- Scenario: " + (f.scenario || currentRun.persona_prompt ? "(see persona_prompt in REPORT.json)" : "—"));
+        lines.push("- Expected behavior: " + (f.expected_behavior || "—"));
+        lines.push("- Actual behavior: " + (f.actual_behavior || "—"));
+        if (f.root_cause) {
+          const rc = f.root_cause;
+          lines.push("- First divergence: " + (rc.first_divergence_stage || "—") + " / " + (rc.first_divergence_node || "—"));
+          lines.push("- Root cause: " + (rc.root_cause_explanation || "—"));
+          lines.push("- Evidence:");
+          (rc.evidence || []).forEach((e) => lines.push("  " + (String(e).startsWith("-") ? String(e) : "- " + e)));
+          lines.push("- Downstream impact: " + (rc.downstream_impact || "—"));
+          lines.push("- Confidence: " + rc.confidence);
+        } else {
+          lines.push("- (not yet analyzed — run \"Analyze Root Causes\" first)");
+        }
+        lines.push("");
+      });
+      lines.push("## Execution Evidence", "");
+      (r.messages || []).filter((m) => m.n8n_execution_id).forEach((m) => lines.push("- turn " + m.turn_no + " (" + m.role + "): execution_id=" + m.n8n_execution_id + " workflow_id=" + m.n8n_workflow_id));
+      const noExec = (r.messages || []).filter((m) => m.role === "bot" && !m.n8n_execution_id);
+      if (noExec.length) lines.push("- " + noExec.length + " bot turn(s) have no execution_id logged (either an AI Agent error, which is never logged by the Log Execution node, or correlation has not run yet).");
+      lines.push("");
+      lines.push("## Errors", "");
+      (r.messages || []).filter((m) => m.is_agent_error).forEach((m) => lines.push("- turn " + m.turn_no + ": confirmed AI Agent node failure (exact canned fallback string matched) — no deeper stack trace available without the execution-detail-proxy."));
+      lines.push("");
+      lines.push("## Recommended Fixes", "");
+      flags.forEach((f) => { if (f.root_cause && f.root_cause.recommended_fix) lines.push("- " + f.flag_id + ": " + f.root_cause.recommended_fix); });
+      lines.push("");
+      lines.push("## Files / Nodes / Tools Involved", "");
+      lines.push("- n8n workflow_id: " + (r.n8n_workflow_id || "unknown"));
+      const nodes = new Set();
+      flags.forEach((f) => { if (f.root_cause && f.root_cause.first_divergence_node) nodes.add(f.root_cause.first_divergence_node); });
+      lines.push(nodes.size ? [...nodes].map((n) => "- " + n).join("\n") : "- (no specific node identified yet)");
+      lines.push("");
+      lines.push("## Verification Requirements", "");
+      lines.push("- Re-run this exact scenario (same bot_key, same persona) after any fix and confirm the same flag no longer reproduces.");
+      lines.push("");
+      lines.push("## Instructions for Claude Code", "");
+      lines.push("This report describes failures detected in the target workflow.", "");
+      lines.push("Before modifying anything:", "");
+      lines.push("1. Inspect the referenced n8n workflow.");
+      lines.push("2. Inspect the referenced execution.");
+      lines.push("3. Inspect the exact node identified in the report.");
+      lines.push("4. Verify the evidence against the actual workflow.");
+      lines.push("5. Determine the real root cause.");
+      lines.push("6. Fix the workflow, prompt, tool configuration, condition, or integration as appropriate.");
+      lines.push("7. Do not blindly apply the recommended fix if the execution evidence contradicts it.");
+      lines.push("8. Re-run the relevant test after the fix.");
+      lines.push("9. Confirm whether the failure is resolved.");
+      return lines.join("\n");
+    }
+
+    function buildReportJson() {
+      const r = currentRun;
+      const flags = r.flags || [];
+      return {
+        test_run_id: r.test_run_id,
+        status: r.status,
+        target_workflow: { workflow_id: r.n8n_workflow_id || null, workflow_name: botLabel(r.bot_key).name, bot_key: r.bot_key },
+        summary: { total: r.total_turns, flags: r.total_flags, critical: r.critical_flags, major: r.major_flags, minor: r.minor_flags },
+        failures: flags.map((f) => {
+          const msg = f.message_id ? messageById(f.message_id) : null;
+          return {
+            flag_id: f.flag_id, severity: f.severity, category: f.category, scenario: f.scenario,
+            user_message: null, expected_behavior: f.expected_behavior, actual_behavior: f.actual_behavior,
+            execution_id: msg ? msg.n8n_execution_id : null,
+            first_divergence: f.root_cause ? { stage: f.root_cause.first_divergence_stage, node: f.root_cause.first_divergence_node } : null,
+            root_cause_category: f.root_cause ? f.root_cause.root_cause_category : null,
+            root_cause_explanation: f.root_cause ? f.root_cause.root_cause_explanation : null,
+            evidence: f.root_cause ? f.root_cause.evidence : [],
+            downstream_impact: f.root_cause ? f.root_cause.downstream_impact : null,
+            recommended_investigation: f.root_cause ? f.root_cause.recommended_investigation : null,
+            recommended_fix: f.root_cause ? f.root_cause.recommended_fix : null,
+            confidence: f.root_cause ? f.root_cause.confidence : f.confidence,
+          };
+        }),
+      };
+    }
+
+    async function exportForClaudeCode() {
+      const btn = document.getElementById("export-claude-btn");
+      const restore = busy(btn, "بيجهّز…");
+      try {
+        const zip = new JSZip();
+        const dir = zip.folder(currentRun.test_run_id);
+        dir.file("REPORT.md", buildReportMd());
+        dir.file("REPORT.json", JSON.stringify(buildReportJson(), null, 2));
+        dir.file("conversation.json", JSON.stringify(currentRun.messages || [], null, 2));
+        dir.file("flags.json", JSON.stringify(currentRun.flags || [], null, 2));
+        dir.file("execution.json", JSON.stringify((currentRun.messages || []).filter((m) => m.n8n_execution_id), null, 2));
+        const evDir = dir.folder("evidence");
+        (currentRun.flags || []).forEach((f) => evDir.file(f.flag_id + ".json", JSON.stringify(f, null, 2)));
+        const blob = await zip.generateAsync({ type: "blob" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url; a.download = currentRun.test_run_id + ".zip";
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 2000);
+        toast("اتصدّر التقرير", "good");
+      } catch (err) {
+        toast("فشل التصدير: " + err.message, "error");
+      } finally {
+        restore();
+      }
+    }
+
+    // ============================================================
+    document.getElementById("back-to-list").addEventListener("click", () => {
+      history.replaceState(null, "", location.pathname);
+      detailView.style.display = "none";
+      listView.style.display = "";
+      loadRunsList();
+    });
+
+    await loadRunsList();
+    const initialRun = new URLSearchParams(location.search).get("run");
+    if (initialRun) await openRun(initialRun);
+  </script>
+</body>
+</html>

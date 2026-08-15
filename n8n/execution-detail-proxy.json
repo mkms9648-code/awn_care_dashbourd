@@ -1,0 +1,138 @@
+{
+  "name": "Execution Detail Proxy (Awn Admin QA)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "execution-detail-proxy",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "e1a1a111-1111-4111-8111-111111111111",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "execution-detail-proxy"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://n8n-c1bz.srv1841520.hstgr.cloud/api/v1/executions/{{ $json.body.execution_id }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "includeData",
+              "value": "true"
+            }
+          ]
+        },
+        "onError": "continueErrorOutput",
+        "options": {}
+      },
+      "id": "e2a2a222-2222-4222-8222-222222222222",
+      "name": "Get Execution",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        220,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// n8n's execution API response shape is assumed based on n8n's documented\n// architecture (data.data.resultData.runData keyed by node name), but this\n// has not been verified against a live execution from this instance yet.\n// If the real shape differs, structure_unrecognized will be true and the raw\n// payload (capped) is attached instead of silently dropping data.\nconst exec = $json || {};\nconst MAX_PREVIEW = 2000;\n\nfunction preview(v) {\n  try {\n    const s = JSON.stringify(v);\n    if (!s) return null;\n    return s.length > MAX_PREVIEW ? s.slice(0, MAX_PREVIEW) + '...(truncated)' : s;\n  } catch (e) {\n    return String(v);\n  }\n}\n\nlet runData = null;\ntry {\n  runData = exec.data && exec.data.resultData && exec.data.resultData.runData;\n} catch (e) {\n  runData = null;\n}\n\nif (!runData || typeof runData !== 'object') {\n  return [{ json: {\n    available: true,\n    structure_unrecognized: true,\n    execution: { id: exec.id || null, workflow_id: exec.workflowId || null, status: exec.status || null, finished: exec.finished || null },\n    raw: preview(exec),\n  } }];\n}\n\nconst nodes = [];\nlet agentToolCalls = [];\n\nfor (const nodeName of Object.keys(runData)) {\n  const runs = runData[nodeName] || [];\n  const last = runs[runs.length - 1] || {};\n  const hasError = !!last.error;\n  const errorInfo = hasError ? {\n    name: last.error.name || null,\n    message: last.error.message || null,\n    description: last.error.description || null,\n    stack: last.error.stack || null,\n  } : null;\n\n  const outputData = last.data && last.data.main ? last.data.main : null;\n\n  nodes.push({\n    name: nodeName,\n    execution_status: last.executionStatus || (hasError ? 'error' : 'success'),\n    start_time: last.startTime || null,\n    execution_time_ms: last.executionTime != null ? last.executionTime : null,\n    has_error: hasError,\n    error: errorInfo,\n    output_preview: preview(outputData),\n  });\n\n  if (/agent/i.test(nodeName) && outputData) {\n    try {\n      const items = outputData[0] || [];\n      for (const item of items) {\n        const j = item && item.json;\n        if (j && Array.isArray(j.intermediateSteps)) {\n          agentToolCalls = agentToolCalls.concat(j.intermediateSteps.map((s) => ({\n            tool: (s.action && s.action.tool) || null,\n            tool_input: preview(s.action && s.action.toolInput),\n            observation: preview(s.observation),\n          })));\n        }\n      }\n    } catch (e) {\n      // best-effort only - leave agentToolCalls as whatever was found so far\n    }\n  }\n}\n\nreturn [{ json: {\n  available: true,\n  structure_unrecognized: false,\n  execution: { id: exec.id || null, workflow_id: exec.workflowId || null, status: exec.status || null, finished: exec.finished || null },\n  nodes,\n  agent_tool_calls: agentToolCalls,\n  agent_tool_calls_note: agentToolCalls.length ? null : 'No intermediateSteps found on any node whose name matched /agent/i - either the agent made no tool calls, or n8n stores tool-call data in a different shape than assumed here.',\n} }];"
+      },
+      "id": "e3a3a333-3333-4333-8333-333333333333",
+      "name": "Curate Execution",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        -60
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "id": "e4a4a444-4444-4444-8444-444444444444",
+      "name": "Respond Available",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        660,
+        -60
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ available: false, reason: \"n8n API call failed - check the Header Auth credential/API key on the Get Execution node, confirm the n8n base URL, or the execution_id may not exist / execution data was not saved.\" }) }}",
+        "options": {}
+      },
+      "id": "e5a5a555-5555-4555-8555-555555555555",
+      "name": "Respond Unavailable",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        440,
+        100
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Get Execution",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Execution": {
+      "main": [
+        [
+          {
+            "node": "Curate Execution",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Unavailable",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Curate Execution": {
+      "main": [
+        [
+          {
+            "node": "Respond Available",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {}
+}
