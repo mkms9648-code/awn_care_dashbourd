@@ -25,6 +25,9 @@ window.APP_CONFIG = {
       // ويب-هوك مساعد المبيعات (n8n): بياخد {product,message,session_id,history}
       // ويرجّع {reply}. نفس الرابط للمنتجين — بيفرّق بينهم بـ product في الطلب.
       SALES_ENDPOINT: "https://n8n-c1bz.srv1841520.hstgr.cloud/webhook/sales-assistant",
+      // ويب-هوك اختبار الذكاء الاصطناعي (n8n): بياخد {system_prompt,message,history}
+      // ويرجّع {reply} — دكتور مختبِر AI بيكلم بوتات ed/round/clinic الحقيقية.
+      AI_TESTER_ENDPOINT: "https://n8n-c1bz.srv1841520.hstgr.cloud/webhook/ai-tester",
     },
     fathi: {
       label: "فتحي ميزانية",

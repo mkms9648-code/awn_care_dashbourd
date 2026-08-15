@@ -13,6 +13,7 @@ const NAV = {
     { key: "conversations", file: "conversations.html", label: "المحادثات",         icon: "ti-message-circle" },
     { key: "assistant",     file: "assistant.html",     label: "مساعد المبيعات",    icon: "ti-sparkles" },
     { key: "bots",          file: "bots.html",          label: "البرومبتات والأدوات", icon: "ti-robot" },
+    { key: "ai-tester",     file: "ai-tester.html",     label: "اختبار الذكاء الاصطناعي", icon: "ti-test-pipe" },
   ],
   fathi: [
     { key: "overview",      file: "overview.html",      label: "نظرة عامة",        icon: "ti-layout-dashboard" },

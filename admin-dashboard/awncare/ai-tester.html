@@ -1,0 +1,528 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>اختبار الذكاء الاصطناعي — عون كير</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css" />
+  <link rel="stylesheet" href="../assets/style.css" />
+  <script src="../config.js"></script>
+  <style>
+    .bt-tabs { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+    .bt-tab { padding: 9px 16px; border-radius: 999px; font-size: 0.85em; font-weight: 600; color: var(--grey-1); background: var(--white); border: 1px solid var(--rule); cursor: pointer; font-family: inherit; }
+    .bt-tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+    .bt-tab:disabled { opacity: .5; cursor: not-allowed; }
+    .setup-grid { display: grid; grid-template-columns: 1.4fr 1fr; gap: 20px; align-items: start; }
+    @media (max-width: 900px) { .setup-grid { grid-template-columns: 1fr; } }
+    textarea.prompt-editor { width: 100%; font-family: "IBM Plex Sans", monospace; direction: rtl; font-size: 0.85em; line-height: 1.6; min-height: 32vh; resize: vertical; }
+    .identity-box { background: var(--paper); border: 1px solid var(--rule); border-radius: 10px; padding: 12px 14px; font-size: 0.86em; line-height: 1.7; }
+    .status-pill { display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; border-radius: 100px; font-size: 0.8em; font-weight: 600; background: var(--paper); color: var(--grey-1); border: 1px solid var(--rule); }
+    .status-pill.running { background: var(--accent-light); color: var(--accent-dark); border-color: var(--accent-border); }
+    .chk-row { display: flex; align-items: center; gap: 8px; font-size: 0.85em; color: var(--ink); margin: 12px 0; }
+    .chk-row input { width: auto; }
+    .btn-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+    #transcript { max-height: 56vh; overflow-y: auto; padding: 18px 20px; display: flex; flex-direction: column; background: var(--paper); border-radius: 12px; border: 1px solid var(--rule); }
+    .bubble-system { align-self: center; background: var(--white); border: 1px dashed var(--rule); color: var(--grey-1); font-size: 0.8em; box-shadow: none; text-align: center; max-width: 80%; }
+    .warn-box { background: var(--warn-bg); color: var(--warn); border: 1px solid var(--warn-border); border-radius: 10px; padding: 10px 14px; font-size: .85em; margin-bottom: 14px; }
+    .transcript-head { display: flex; align-items: center; gap: 10px; margin: 22px 0 10px; }
+    .transcript-head h3 { margin: 0; font-size: 1em; color: var(--ink-strong); }
+  </style>
+</head>
+<body>
+  <div class="app-shell">
+    <aside id="app-nav"></aside>
+    <main class="main">
+      <div class="page">
+        <div class="page-head">
+          <div>
+            <h1>اختبار الذكاء الاصطناعي</h1>
+            <p class="subtitle">AI بيلعب دور دكتور مختبِر، بيكلم البوت الحقيقي عن طريق نفس الـ webhook اللي التطبيق بيستخدمه — إنت بس اتفرج على المحادثة وهي بتحصل.</p>
+          </div>
+        </div>
+
+        <div id="warn-slot"></div>
+
+        <div class="bt-tabs" id="bot-tabs"></div>
+
+        <div class="card">
+          <div class="setup-grid">
+            <div>
+              <label class="lbl">شخصية الدكتور المختبِر (system prompt)</label>
+              <textarea class="prompt-editor" id="persona-text" spellcheck="false" placeholder="اكتب تعليمات الدكتور المختبِر هنا…"></textarea>
+              <div class="hint">اقرا برومبت البوت الحقيقي نفسه من صفحة «البرومبتات والأدوات» عشان تكتب شخصية اختبار دقيقة. الشخصية لازم تكتب END_TEST لوحده لما تخلّص.</div>
+            </div>
+            <div>
+              <div class="field">
+                <label class="lbl">أقصى عدد رسايل (سقف أمان ثابت 400 برضو)</label>
+                <input type="number" id="max-turns" min="1" max="400" step="1" />
+              </div>
+              <div class="field">
+                <label class="lbl">الهوية المستخدمة للاختبار</label>
+                <div class="identity-box" id="identity-box">جاري التحميل…</div>
+                <button class="btn btn-neutral btn-sm" id="change-identity" style="margin-top:8px"><i class="ti ti-user-cog"></i> تغيير الهوية</button>
+              </div>
+              <label class="chk-row"><input type="checkbox" id="clear-memory-chk" checked /> امسح ذاكرة البوت لهذا الدكتور قبل البدء</label>
+              <div class="btn-row">
+                <button class="btn btn-neutral" id="save-btn"><i class="ti ti-device-floppy"></i> حفظ الشخصية</button>
+                <button class="btn" id="start-btn"><i class="ti ti-player-play"></i> ابدأ الاختبار</button>
+                <button class="btn btn-danger" id="stop-btn" disabled><i class="ti ti-player-stop"></i> إيقاف</button>
+                <span class="status-pill" id="status-pill">جاهز</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="transcript-head">
+          <h3>المحادثة المباشرة</h3>
+        </div>
+        <div id="transcript"><div class="empty-state">لسه مفيش اختبار اتشغّل. دوس «ابدأ الاختبار» عشان تتفرج.</div></div>
+      </div>
+    </main>
+  </div>
+
+  <script type="module">
+    import { client, requireAdmin, applyProductTheme, escapeHtml, productConfig } from "../assets/core.js";
+    import { renderShell } from "../assets/shell.js";
+    import { openModal, confirmDialog, toast, busy } from "../assets/ui.js";
+
+    const PRODUCT = "awncare";
+    applyProductTheme(PRODUCT);
+    const session = await requireAdmin();
+    if (!session) throw new Error("not authorized");
+    renderShell(session, { product: PRODUCT, active: "ai-tester" });
+
+    const sb = client(PRODUCT);
+    const cfg = productConfig(PRODUCT);
+    const HARD_TURN_CAP = 400;
+
+    const BOT_LABELS = {
+      ed: { name: "الطوارئ (Dash)", icon: "ti-ambulance" },
+      round: { name: "الراوند (Rounds)", icon: "ti-stethoscope" },
+      clinic: { name: "العيادة (Clinic)", icon: "ti-building-hospital" },
+    };
+    const BOT_KEYS = ["ed", "round", "clinic"];
+
+    const warnSlot = document.getElementById("warn-slot");
+    if (!cfg.AI_TESTER_ENDPOINT) {
+      warnSlot.innerHTML = `<div class="warn-box">لسه محتاج تحط رابط اختبار الذكاء الاصطناعي (n8n) في <code>config.js</code> تحت <code>PRODUCTS.${PRODUCT}.AI_TESTER_ENDPOINT</code>.</div>`;
+    }
+
+    const tabsEl = document.getElementById("bot-tabs");
+    const personaTextEl = document.getElementById("persona-text");
+    const maxTurnsEl = document.getElementById("max-turns");
+    const identityBoxEl = document.getElementById("identity-box");
+    const changeIdentityBtn = document.getElementById("change-identity");
+    const clearMemoryChk = document.getElementById("clear-memory-chk");
+    const saveBtn = document.getElementById("save-btn");
+    const startBtn = document.getElementById("start-btn");
+    const stopBtn = document.getElementById("stop-btn");
+    const statusPill = document.getElementById("status-pill");
+    const transcriptEl = document.getElementById("transcript");
+
+    tabsEl.innerHTML = BOT_KEYS.map((k) => `<button type="button" class="bt-tab${k === "ed" ? " active" : ""}" data-bot="${k}"><i class="ti ${BOT_LABELS[k].icon}"></i> ${escapeHtml(BOT_LABELS[k].name)}</button>`).join("");
+
+    let activeBotKey = "ed";
+    let personaCache = {};       // bot_key -> row from admin_list_test_personas (+ merged persona_prompt once fetched)
+    let workspacesCache = null;  // lazy-loaded on first identity modal open
+    let run = { status: "idle", runToken: 0, turn: 0, history: [], abortCtrl: null };
+
+    function botLabel(k) { return BOT_LABELS[k] || { name: k, icon: "ti-robot" }; }
+
+    // ---- تحميل شخصيات كل البوتات (overview) ----
+    async function loadPersonaList() {
+      const { data, error } = await sb.rpc("admin_list_test_personas");
+      if (error) { toast(error.message, "error"); return; }
+      (data || []).forEach((row) => {
+        personaCache[row.bot_key] = Object.assign({}, personaCache[row.bot_key], row);
+      });
+    }
+
+    // ---- تحميل نص شخصية بوت واحد (فريش) ----
+    async function loadPersonaText(botKey) {
+      const { data, error } = await sb.rpc("admin_get_test_persona", { p_bot_key: botKey });
+      if (error) { toast(error.message, "error"); return; }
+      personaCache[botKey] = Object.assign({}, personaCache[botKey], data);
+    }
+
+    function renderIdentityBox(botKey) {
+      const p = personaCache[botKey] || {};
+      if (p.test_staff_id && p.test_chat_id) {
+        identityBoxEl.innerHTML = `<i class="ti ti-user-check" style="color:var(--good)"></i> مربوط بـ <strong>${escapeHtml(p.test_doctor_name || "—")}</strong>
+          <div class="muted" style="margin-top:2px">${escapeHtml(p.test_workspace_name || "")}${p.test_org_name ? " — " + escapeHtml(p.test_org_name) : ""}</div>
+          <div class="mono" style="margin-top:4px">${escapeHtml(p.test_chat_id)}</div>`;
+      } else {
+        identityBoxEl.innerHTML = `<i class="ti ti-user-x" style="color:var(--warn)"></i> لسه مفيش دكتور تجريبي مربوط بهذا البوت.`;
+      }
+    }
+
+    async function renderTab(botKey) {
+      activeBotKey = botKey;
+      tabsEl.querySelectorAll(".bt-tab").forEach((b) => b.classList.toggle("active", b.dataset.bot === botKey));
+      personaTextEl.value = "جاري التحميل…";
+      personaTextEl.disabled = true;
+      await loadPersonaText(botKey);
+      const p = personaCache[botKey] || {};
+      personaTextEl.value = p.persona_prompt || "";
+      personaTextEl.disabled = false;
+      maxTurnsEl.value = p.max_turns || 150;
+      renderIdentityBox(botKey);
+    }
+
+    tabsEl.addEventListener("click", async (e) => {
+      const btn = e.target.closest(".bt-tab");
+      if (!btn || btn.dataset.bot === activeBotKey) return;
+      if (run.status === "running") { toast("وقف الاختبار الحالي الأول", "error"); return; }
+      await renderTab(btn.dataset.bot);
+    });
+
+    // ---- حفظ نص الشخصية / أقصى عدد رسايل (من غير ما يلمس الهوية المربوطة) ----
+    async function savePersona(silent) {
+      const { error } = await sb.rpc("admin_set_test_persona", {
+        p_bot_key: activeBotKey,
+        p_persona_prompt: personaTextEl.value,
+        p_max_turns: Math.max(1, Math.min(HARD_TURN_CAP, Number(maxTurnsEl.value) || 150)),
+      });
+      if (error) { if (!silent) toast(error.message, "error"); throw new Error(error.message); }
+      personaCache[activeBotKey] = Object.assign({}, personaCache[activeBotKey], {
+        persona_prompt: personaTextEl.value,
+        max_turns: Math.max(1, Math.min(HARD_TURN_CAP, Number(maxTurnsEl.value) || 150)),
+      });
+      if (!silent) toast("اتحفظت الشخصية", "good");
+    }
+    saveBtn.addEventListener("click", async () => {
+      const restore = busy(saveBtn, "بيحفظ…");
+      try { await savePersona(false); } catch {} finally { restore(); }
+    });
+
+    // ============================================================
+    // ربط/تغيير هوية الدكتور التجريبي
+    // ============================================================
+    async function ensureWorkspaces() {
+      if (workspacesCache) return workspacesCache;
+      const { data, error } = await sb.rpc("admin_workspaces_overview");
+      if (error) { toast(error.message, "error"); return []; }
+      workspacesCache = data || [];
+      return workspacesCache;
+    }
+
+    changeIdentityBtn.addEventListener("click", async () => {
+      const botKey = activeBotKey;
+      const lbl = botLabel(botKey);
+      const workspaces = await ensureWorkspaces();
+
+      const body = document.createElement("div");
+      body.innerHTML = `
+        <div class="field">
+          <label class="lbl">مساحة العمل</label>
+          <select id="id-ws"><option value="">اختار مساحة عمل…</option>${workspaces.map((w) => `<option value="${w.workspace_id}">${escapeHtml(w.workspace_name)} — ${escapeHtml(w.org_name)}</option>`).join("")}</select>
+          <div class="hint" id="id-ws-warn" style="display:none;color:var(--warn)"></div>
+        </div>
+        <div class="bt-tabs" id="id-mode-tabs">
+          <button type="button" class="bt-tab active" data-mode="existing">دكتور موجود</button>
+          <button type="button" class="bt-tab" data-mode="new">دكتور تجريبي جديد</button>
+        </div>
+        <div id="id-existing">
+          <div class="field">
+            <label class="lbl">الدكتور</label>
+            <select id="id-doc"><option value="">اختار مساحة عمل الأول…</option></select>
+          </div>
+        </div>
+        <div id="id-new" style="display:none">
+          <div class="field"><label class="lbl">اسم الدكتور التجريبي</label><input type="text" id="id-new-name" value="AI QA Tester — ${escapeHtml(lbl.name)}" /></div>
+          <div class="field"><label class="lbl">التخصص (اختياري)</label><input type="text" id="id-new-spec" value="اختبار آلي" /></div>
+        </div>
+        <div class="hint">الدكتور ده هيبعت رسايل حقيقية للبوت الحقيقي جوّه مساحة العمل دي — استخدم اسم واضح إنه تجريبي عشان محدش يتلخبط بيه لاحقًا.</div>`;
+
+      const wsSel = body.querySelector("#id-ws");
+      const wsWarn = body.querySelector("#id-ws-warn");
+      const docSel = body.querySelector("#id-doc");
+      const modeTabs = body.querySelector("#id-mode-tabs");
+      const existingBox = body.querySelector("#id-existing");
+      const newBox = body.querySelector("#id-new");
+      let existingDoctors = [];
+
+      modeTabs.addEventListener("click", (e) => {
+        const b = e.target.closest(".bt-tab");
+        if (!b) return;
+        modeTabs.querySelectorAll(".bt-tab").forEach((x) => x.classList.remove("active"));
+        b.classList.add("active");
+        existingBox.style.display = b.dataset.mode === "existing" ? "" : "none";
+        newBox.style.display = b.dataset.mode === "new" ? "" : "none";
+      });
+
+      async function onWorkspaceChange() {
+        const wsId = wsSel.value;
+        docSel.innerHTML = `<option value="">جاري التحميل…</option>`;
+        wsWarn.style.display = "none";
+        if (!wsId) { docSel.innerHTML = `<option value="">اختار مساحة عمل الأول…</option>`; return; }
+        const ws = workspaces.find((w) => w.workspace_id === wsId);
+        if (ws && !(ws.entitled_modules || []).includes(botKey) && !(ws.modules_with_channel || []).includes(botKey)) {
+          wsWarn.style.display = "";
+          wsWarn.textContent = `تنبيه: مساحة العمل دي مش شكلها مفعّل عندها موديول «${lbl.name}» — الاختبار ممكن يفشل بـ AWN_BOT_NOT_ENABLED.`;
+        }
+        const { data, error } = await sb.rpc("admin_list_doctors", { p_workspace_id: wsId });
+        if (error) { toast(error.message, "error"); docSel.innerHTML = `<option value="">—</option>`; return; }
+        existingDoctors = data || [];
+        docSel.innerHTML = existingDoctors.length
+          ? `<option value="">اختار…</option>` + existingDoctors.map((d) => `<option value="${d.staff_id}">${escapeHtml(d.full_name)}${d.mobile_code ? "" : " (بدون كود دخول لسه)"}</option>`).join("")
+          : `<option value="">مفيش أطباء في مساحة العمل دي</option>`;
+      }
+      wsSel.addEventListener("change", onWorkspaceChange);
+
+      const m = openModal({
+        title: "ربط دكتور تجريبي", subtitle: lbl.name, icon: "ti-user-cog", wide: true,
+        body, actionsLeadSpacer: true,
+        actions: [
+          { label: "إلغاء", variant: "btn-neutral", onClick: (close) => close() },
+          { label: "اربط", icon: "ti-check", onClick: async (close) => {
+              const wsId = wsSel.value;
+              if (!wsId) { toast("اختار مساحة عمل", "error"); return; }
+              const mode = modeTabs.querySelector(".bt-tab.active").dataset.mode;
+              const btn = m.root.querySelector('[data-act="1"]');
+              const restore = busy(btn, "بيربط…");
+              try {
+                let staffId, chatId;
+                if (mode === "existing") {
+                  staffId = docSel.value;
+                  if (!staffId) throw new Error("اختار دكتور");
+                  const doc = existingDoctors.find((d) => d.staff_id === staffId);
+                  chatId = doc && doc.mobile_code;
+                  if (!chatId) {
+                    const { data, error } = await sb.rpc("admin_issue_doctor_login", { p_staff_id: staffId, p_reset: false });
+                    if (error) throw new Error(error.message);
+                    chatId = data.code;
+                  }
+                } else {
+                  const name = body.querySelector("#id-new-name").value.trim();
+                  if (!name) throw new Error("اكتب اسم الدكتور التجريبي");
+                  const spec = body.querySelector("#id-new-spec").value.trim();
+                  const { data: cd, error: ce } = await sb.rpc("admin_create_doctor", { p_workspace_id: wsId, p_full_name: name, p_specialty: spec || null });
+                  if (ce) throw new Error(ce.message);
+                  staffId = cd.staff_id;
+                  const { data: ld, error: le } = await sb.rpc("admin_issue_doctor_login", { p_staff_id: staffId, p_reset: false });
+                  if (le) throw new Error(le.message);
+                  chatId = ld.code;
+                }
+                const { error: se } = await sb.rpc("admin_set_test_persona", {
+                  p_bot_key: botKey, p_persona_prompt: personaTextEl.value,
+                  p_max_turns: Math.max(1, Math.min(HARD_TURN_CAP, Number(maxTurnsEl.value) || 150)),
+                  p_test_staff_id: staffId, p_test_chat_id: chatId,
+                });
+                if (se) throw new Error(se.message);
+                await loadPersonaList();
+                renderIdentityBox(botKey);
+                close();
+                toast("اتربط الدكتور التجريبي", "good");
+              } catch (err) {
+                restore();
+                toast(err.message, "error");
+              }
+            } },
+        ],
+      });
+    });
+
+    // ============================================================
+    // نسخة المحادثة الحية
+    // ============================================================
+    function clearTranscript() { transcriptEl.innerHTML = ""; }
+    function nowTimeStr() { return new Date().toLocaleTimeString("ar-EG", { hour: "numeric", minute: "2-digit" }); }
+    function addBubble(role, text) {
+      const el = document.createElement("div");
+      el.className = "bubble " + (role === "bot" ? "bubble-ai" : role === "system" ? "bubble-system" : "bubble-human");
+      const t = document.createElement("div");
+      t.className = "bubble-text"; t.dir = "auto"; t.textContent = text || "";
+      el.appendChild(t);
+      if (role !== "system") {
+        const time = document.createElement("div");
+        time.className = "bubble-time"; time.textContent = (role === "bot" ? "البوت الحقيقي" : "الدكتور المختبِر") + " · " + nowTimeStr();
+        el.appendChild(time);
+      }
+      transcriptEl.appendChild(el);
+      transcriptEl.scrollTop = transcriptEl.scrollHeight;
+      return el;
+    }
+    function showTyping(role) {
+      const el = document.createElement("div");
+      el.className = "bubble " + (role === "bot" ? "bubble-ai" : "bubble-human");
+      el.innerHTML = `<div class="typing"><span></span><span></span><span></span></div>`;
+      transcriptEl.appendChild(el);
+      transcriptEl.scrollTop = transcriptEl.scrollHeight;
+      return el;
+    }
+
+    function setUiRunning(running) {
+      startBtn.disabled = running;
+      stopBtn.disabled = !running;
+      saveBtn.disabled = running;
+      changeIdentityBtn.disabled = running;
+      personaTextEl.disabled = running;
+      maxTurnsEl.disabled = running;
+      tabsEl.querySelectorAll(".bt-tab").forEach((b) => (b.disabled = running));
+      statusPill.classList.toggle("running", running);
+    }
+    function updateStatus(effectiveMax) {
+      statusPill.textContent = run.status === "running" ? `جاري… جولة ${run.turn} من ${effectiveMax}` : "جاهز";
+    }
+
+    function parseTesterReply(raw) {
+      const s = String(raw || "");
+      const isEnd = /END_TEST/i.test(s);
+      return { text: s.replace(/END_TEST/gi, "").trim(), isEnd };
+    }
+
+    async function callTester(payload, signal) {
+      const res = await fetch(cfg.AI_TESTER_ENDPOINT, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload), signal,
+      });
+      if (!res.ok) throw new Error("HTTP " + res.status + " من التستر");
+      const data = await res.json().catch(() => ({}));
+      return data.reply || data.output || data.text || data.answer || "";
+    }
+    async function callRealBot(botKey, chatId, text, signal) {
+      const res = await fetch(`${cfg.N8N_BASE_URL}/webhook/${botKey}-mobile`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chat_id: chatId, bot_key: botKey, type: "text", text }), signal,
+      });
+      const txt = await res.text();
+      let d; try { d = JSON.parse(txt); } catch { d = { reply_text: txt }; }
+      if (!res.ok) throw new Error("HTTP " + res.status + " من البوت");
+      if (Array.isArray(d)) d = d[0] || {};
+      return d.reply_text ?? d.ask ?? d.echo ?? d.output ?? d.reply ?? d.message ?? d.text ?? "";
+    }
+
+    function finish(reason, err) {
+      if (run.status !== "running") return;
+      run.status = "idle";
+      setUiRunning(false);
+      updateStatus(0);
+      const messages = {
+        stopped: "الاختبار اتوقف يدويًا.",
+        completed: "الاختبار خلص (END_TEST).",
+        "max-turns": "الاختبار وقف — وصل لأقصى عدد رسايل المُعدّ.",
+        "hard-cap": "الاختبار وقف — وصل لسقف الأمان (" + HARD_TURN_CAP + " رسالة).",
+        error: "الاختبار وقف بسبب خطأ" + (err ? (": " + err.message) : "") + ".",
+      };
+      addBubble("system", messages[reason] || reason);
+    }
+
+    async function runLoop(myToken, botKey, chatId, systemPrompt, effectiveMax) {
+      while (true) {
+        if (run.runToken !== myToken) return;
+        run.turn++;
+        updateStatus(effectiveMax);
+        if (run.turn > effectiveMax) { finish("max-turns"); return; }
+
+        const typing1 = showTyping("tester");
+        let testerRaw;
+        try {
+          testerRaw = await callTester({ system_prompt: systemPrompt, message: run.lastBotMessage || "", history: run.history }, run.abortCtrl.signal);
+        } catch (e) {
+          typing1.remove();
+          if (e.name === "AbortError") finish("stopped"); else finish("error", e);
+          return;
+        }
+        typing1.remove();
+        if (run.runToken !== myToken) return;
+
+        const { text, isEnd } = parseTesterReply(testerRaw);
+        if (isEnd) { finish("completed"); return; }
+        if (!text) { finish("error", new Error("رد فاضي من التستر")); return; }
+        addBubble("tester", text);
+        run.history.push({ role: "assistant", content: text });
+
+        const typing2 = showTyping("bot");
+        let botReply;
+        try {
+          botReply = await callRealBot(botKey, chatId, text, run.abortCtrl.signal);
+        } catch (e) {
+          typing2.remove();
+          if (e.name === "AbortError") finish("stopped"); else finish("error", e);
+          return;
+        }
+        typing2.remove();
+        if (run.runToken !== myToken) return;
+
+        addBubble("bot", botReply);
+        run.history.push({ role: "user", content: botReply });
+        run.lastBotMessage = botReply;
+      }
+    }
+
+    let startPreparing = false;
+    startBtn.addEventListener("click", async () => {
+      if (run.status === "running" || startPreparing) return;
+      if (!cfg.AI_TESTER_ENDPOINT) { toast("حط رابط اختبار الذكاء الاصطناعي في config.js الأول", "error"); return; }
+      if (!personaTextEl.value.trim()) { toast("اكتب شخصية الدكتور المختبِر الأول", "error"); return; }
+
+      startPreparing = true;
+      const restore = busy(startBtn, "بيجهّز…");
+      try {
+        try { await savePersona(true); } catch { toast("مقدرش يحفظ الشخصية", "error"); return; }
+
+        const botKey = activeBotKey;
+        let p = personaCache[botKey] || {};
+        if (!p.test_staff_id) {
+          toast("لازم تربط دكتور تجريبي الأول", "error");
+          changeIdentityBtn.click();
+          return;
+        }
+
+        // هات الكود الحي (مش المخزّن المؤقت) عشان لو كان اتغيّر من صفحة الأطباء
+        const { data: docs, error: dErr } = await sb.rpc("admin_list_doctors", { p_workspace_id: p.test_workspace_id });
+        if (dErr) { toast(dErr.message, "error"); return; }
+        const doc = (docs || []).find((d) => d.staff_id === p.test_staff_id);
+        if (!doc) { toast("الدكتور التجريبي المربوط مش موجود دلوقتي — اربط هوية تانية", "error"); return; }
+        let chatId = doc.mobile_code;
+        if (!chatId) {
+          const { data: ld, error: le } = await sb.rpc("admin_issue_doctor_login", { p_staff_id: p.test_staff_id, p_reset: false });
+          if (le) { toast(le.message, "error"); return; }
+          chatId = ld.code;
+          await sb.rpc("admin_set_test_persona", { p_bot_key: botKey, p_persona_prompt: personaTextEl.value, p_test_chat_id: chatId });
+        }
+
+        const effectiveMax = Math.max(1, Math.min(HARD_TURN_CAP, Number(maxTurnsEl.value) || 150));
+        const lbl = botLabel(botKey);
+        const wsLabel = p.test_workspace_name ? `${p.test_workspace_name}${p.test_org_name ? " — " + p.test_org_name : ""}` : "—";
+        const willClear = clearMemoryChk.checked;
+        const msg = `هيبدأ اختبار آلي على بوت «${lbl.name}» جوّه مساحة العمل «${wsLabel}»، بشخصية الدكتور «${doc.full_name}» (كود ${chatId}). الرسايل دي هتتسجّل فعليًا وهتظهر في صفحة «المحادثات».${willClear ? " هيتمسح تاريخ البوت لهذا الدكتور قبل البدء (كل البوتات مش بس ده)." : ""} الحد الأقصى: ${effectiveMax} رسالة (سقف أمان ${HARD_TURN_CAP}).`;
+        const ok = await confirmDialog({ title: "تأكيد بدء الاختبار", message: msg, confirmLabel: "ابدأ", icon: "ti-player-play" });
+        if (!ok) return;
+
+        if (willClear) {
+          const { error: cErr } = await sb.rpc("admin_clear_doctor_memory", { p_staff_id: p.test_staff_id });
+          if (cErr) { toast(cErr.message, "error"); return; }
+        }
+
+        clearTranscript();
+        run.status = "running";
+        run.turn = 0;
+        run.history = [{ role: "user", content: "ابدأ" }];
+        run.lastBotMessage = "";
+        run.abortCtrl = new AbortController();
+        run.runToken++;
+        setUiRunning(true);
+        updateStatus(effectiveMax);
+        runLoop(run.runToken, botKey, chatId, personaTextEl.value, effectiveMax);
+      } finally {
+        startPreparing = false;
+        restore();
+        startBtn.disabled = run.status === "running";
+      }
+    });
+
+    stopBtn.addEventListener("click", () => {
+      if (run.status !== "running") return;
+      run.abortCtrl?.abort();
+      run.runToken++;
+      finish("stopped");
+    });
+
+    await loadPersonaList();
+    await renderTab("ed");
+  </script>
+</body>
+</html>
