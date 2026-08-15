@@ -20,6 +20,7 @@ const NAV = {
     { key: "subscriptions", file: "subscriptions.html", label: "الاشتراكات والتحكم", icon: "ti-toggle-right-filled" },
     { key: "clients",       file: "clients.html",       label: "العملاء والدخول",   icon: "ti-user-cog" },
     { key: "invoices",      file: "invoices.html",      label: "شكل الفواتير",      icon: "ti-file-invoice" },
+    { key: "receipts",      file: "receipts.html",      label: "شكل إيصال الاستلام", icon: "ti-receipt" },
     { key: "conversations", file: "conversations.html", label: "المحادثات",         icon: "ti-message-circle" },
     { key: "assistant",     file: "assistant.html",     label: "مساعد المبيعات",    icon: "ti-sparkles" },
   ],
