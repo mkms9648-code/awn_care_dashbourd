@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>الأقسام — عون كير</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css" />
+  <link rel="stylesheet" href="../assets/style.css" />
+  <script src="../config.js"></script>
+</head>
+<body>
+  <div class="app-shell">
+    <aside id="app-nav"></aside>
+    <main class="main">
+      <div class="page">
+        <div class="page-head">
+          <div>
+            <h1>الأقسام</h1>
+            <p class="subtitle">كل مستشفى (مساحة عمل) له قائمة أقسامه الخاصة اللي بوت الطوارئ بيحجز عليها المريض وقت التحويل للراوند — عدّلها هنا بدل Supabase.</p>
+          </div>
+          <button class="btn" id="add-btn" disabled><i class="ti ti-plus"></i> قسم جديد</button>
+        </div>
+
+        <div class="toolbar">
+          <select id="ws-select" style="min-width:280px"><option value="">جاري التحميل…</option></select>
+        </div>
+
+        <div class="card"><div class="table-wrap" id="table-wrap"><p class="muted">اختار مساحة عمل الأول…</p></div></div>
+      </div>
+    </main>
+  </div>
+
+  <script type="module">
+    import { client, requireAdmin, applyProductTheme, escapeHtml } from "../assets/core.js";
+    import { renderShell } from "../assets/shell.js";
+    import { openModal, confirmDialog, toast, buildMenu, busy } from "../assets/ui.js";
+
+    const PRODUCT = "awncare";
+    applyProductTheme(PRODUCT);
+    const session = await requireAdmin();
+    if (!session) throw new Error("not authorized");
+    renderShell(session, { product: PRODUCT, active: "units" });
+
+    const sb = client(PRODUCT);
+    const wsSelect = document.getElementById("ws-select");
+    const tableWrap = document.getElementById("table-wrap");
+    const addBtn = document.getElementById("add-btn");
+
+    let units = [];
+
+    async function loadWorkspaces() {
+      const { data, error } = await sb.rpc("admin_workspaces_overview");
+      if (error) {
+        wsSelect.innerHTML = `<option value="">فشل التحميل</option>`;
+        tableWrap.innerHTML = `<p class="error-msg">${escapeHtml(error.message)}</p>`;
+        return;
+      }
+      const workspaces = data || [];
+      if (workspaces.length === 0) {
+        wsSelect.innerHTML = `<option value="">لا يوجد</option>`;
+        tableWrap.innerHTML = `<div class="empty-state">مفيش مساحات عمل مسجّلة لسه.</div>`;
+        return;
+      }
+      wsSelect.innerHTML = workspaces
+        .map((w) => `<option value="${escapeHtml(w.workspace_id)}">${escapeHtml(w.workspace_name)} — ${escapeHtml(w.org_name)}</option>`)
+        .join("");
+      addBtn.disabled = false;
+      loadUnits();
+    }
+
+    async function loadUnits() {
+      const workspaceId = wsSelect.value;
+      if (!workspaceId) return;
+      tableWrap.innerHTML = `<p class="muted">جاري التحميل…</p>`;
+      const { data, error } = await sb.rpc("admin_list_units", { p_workspace_id: workspaceId });
+      if (error) { tableWrap.innerHTML = `<p class="error-msg">${escapeHtml(error.message)}</p>`; return; }
+      units = data || [];
+      render();
+    }
+
+    function render() {
+      if (units.length === 0) {
+        tableWrap.innerHTML = `<div class="empty-state">مفيش أقسام مضافة لمساحة العمل دي لسه — ضيف أول قسم من فوق.</div>`;
+        return;
+      }
+      const table = document.createElement("table");
+      table.innerHTML = `<thead><tr><th>القسم</th><th>الاستخدام</th><th></th></tr></thead><tbody></tbody>`;
+      const tbody = table.querySelector("tbody");
+      units.forEach((u) => tbody.appendChild(unitRow(u)));
+      tableWrap.innerHTML = "";
+      tableWrap.appendChild(table);
+    }
+
+    function unitRow(u) {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td><strong>${escapeHtml(u.name)}</strong><div class="muted mono">${escapeHtml(u.key)}</div></td>
+        <td>${u.in_use > 0 ? `<span class="pill pill-warning">${u.in_use} حالة</span>` : `<span class="pill pill-muted">مش مستخدم</span>`}</td>
+        <td class="actions-cell"></td>`;
+
+      const menu = buildMenu([
+        { label: "تعديل الاسم", icon: "ti-edit", onClick: () => renameUnit(u) },
+        { sep: true },
+        {
+          label: u.in_use > 0 ? "مستخدم — غيّر الاسم بدل الحذف" : "حذف",
+          icon: "ti-trash",
+          danger: u.in_use === 0,
+          onClick: () => { if (u.in_use > 0) toast("القسم ده مستخدم في حالات حالية — غيّر اسمه بدل ما تمسحه، أو انقل الحالات الأول.", "error"); else deleteUnit(u); },
+        },
+      ]);
+      tr.querySelector(".actions-cell").appendChild(menu);
+      return tr;
+    }
+
+    async function renameUnit(u) {
+      const body = document.createElement("div");
+      body.innerHTML = `<div class="field"><label class="lbl">اسم القسم</label><input type="text" id="f-name" /></div>`;
+      body.querySelector("#f-name").value = u.name;
+      const m = openModal({
+        title: "تعديل اسم القسم", icon: "ti-edit", body, actionsLeadSpacer: true,
+        actions: [
+          { label: "إلغاء", variant: "btn-neutral", onClick: (close) => close() },
+          { label: "حفظ", icon: "ti-check", onClick: async (close) => {
+              const name = body.querySelector("#f-name").value.trim();
+              if (!name || name === u.name) { close(); return; }
+              const btn = m.root.querySelector('[data-act="1"]');
+              const restore = busy(btn, "بيحفظ…");
+              const { error } = await sb.rpc("admin_rename_unit", { p_unit_id: u.id, p_name: name });
+              if (error) { restore(); toast(error.message, "error"); return; }
+              close();
+              toast("اتغيّر الاسم", "good");
+              loadUnits();
+            } },
+        ],
+      });
+    }
+
+    async function deleteUnit(u) {
+      const ok = await confirmDialog({
+        title: "حذف القسم؟", icon: "ti-trash", danger: true, confirmLabel: "احذف",
+        message: `هيتحذف قسم «${u.name}» من مساحة العمل دي نهائيًا.`,
+      });
+      if (!ok) return;
+      const { error } = await sb.rpc("admin_delete_unit", { p_unit_id: u.id });
+      if (error) { toast(error.message, "error"); return; }
+      toast("اتمسح القسم", "good");
+      loadUnits();
+    }
+
+    addBtn.addEventListener("click", () => {
+      const body = document.createElement("div");
+      body.innerHTML = `<div class="field"><label class="lbl">اسم القسم</label><input type="text" id="f-name" placeholder="مثال: Intensive Care Unit" /></div>`;
+      const m = openModal({
+        title: "قسم جديد", icon: "ti-plus", body, actionsLeadSpacer: true,
+        actions: [
+          { label: "إلغاء", variant: "btn-neutral", onClick: (close) => close() },
+          { label: "إضافة", icon: "ti-check", onClick: async (close) => {
+              const name = body.querySelector("#f-name").value.trim();
+              if (!name) { toast("اكتب اسم القسم", "error"); return; }
+              const btn = m.root.querySelector('[data-act="1"]');
+              const restore = busy(btn, "بيحفظ…");
+              const { error } = await sb.rpc("admin_create_unit", { p_workspace_id: wsSelect.value, p_name: name });
+              if (error) { restore(); toast(error.message, "error"); return; }
+              close();
+              toast("اتضاف القسم", "good");
+              loadUnits();
+            } },
+        ],
+      });
+    });
+
+    wsSelect.addEventListener("change", loadUnits);
+
+    await loadWorkspaces();
+  </script>
+</body>
+</html>
