@@ -33,7 +33,6 @@
             }
           ]
         },
-        "onError": "continueErrorOutput",
         "options": {}
       },
       "id": "e2a2a222-2222-4222-8222-222222222222",
@@ -43,7 +42,8 @@
       "position": [
         220,
         0
-      ]
+      ],
+      "onError": "continueErrorOutput"
     },
     {
       "parameters": {
