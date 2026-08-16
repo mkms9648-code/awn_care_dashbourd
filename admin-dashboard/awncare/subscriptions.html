@@ -1,0 +1,464 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>الاشتراكات والتحكم — عون كير</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css" />
+  <link rel="stylesheet" href="../assets/style.css" />
+  <script src="../config.js"></script>
+  <style>
+    .ws-card { border: 1px solid var(--rule); border-radius: var(--radius-lg); background: var(--white); margin-bottom: 12px; box-shadow: var(--shadow); overflow: hidden; }
+    .ws-head { display: flex; align-items: center; gap: 14px; padding: 15px 18px; cursor: pointer; }
+    .ws-head:hover { background: var(--paper); }
+    .ws-head .chev { transition: transform .18s; color: var(--grey-2); margin-inline-start: auto; }
+    .ws-card.open .ws-head .chev { transform: rotate(180deg); }
+    .ws-title { font-weight: 700; color: var(--ink-strong); }
+    .ws-org { font-size: .82em; color: var(--grey-1); margin-top: 2px; }
+    .ws-body { display: none; padding: 4px 18px 18px; border-top: 1px solid var(--rule); }
+    .ws-card.open .ws-body { display: block; }
+    .plan-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 16px 0; border-bottom: 1px dashed var(--rule); margin-bottom: 8px; }
+    .plan-row .lbl { margin: 0; }
+    .plan-row select { width: auto; min-width: 200px; }
+    .feat-list { display: flex; flex-direction: column; }
+    .feat-row { display: flex; align-items: center; gap: 12px; padding: 12px 2px; border-bottom: 1px solid var(--rule); flex-wrap: wrap; }
+    .feat-row:last-child { border-bottom: none; }
+    .feat-info { min-width: 0; flex: 1; }
+    .feat-name { font-weight: 600; color: var(--ink-strong); }
+    .feat-desc { font-size: .8em; color: var(--grey-2); margin-top: 2px; }
+    .feat-eff { min-width: 90px; text-align: center; }
+    .brand-row { display: flex; align-items: center; gap: 12px; padding: 14px 0; border-bottom: 1px dashed var(--rule); }
+    .brand-logo { width: 46px; height: 46px; border-radius: 10px; object-fit: cover; background: var(--ink-strong); color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 700; flex-shrink: 0; overflow: hidden; }
+    .brand-logo img { width: 100%; height: 100%; object-fit: cover; }
+    .logo-edit-box { display: flex; align-items: center; gap: 12px; }
+    .logo-preview { width: 64px; height: 64px; border-radius: 12px; border: 1px solid var(--rule); background: var(--paper); display: flex; align-items: center; justify-content: center; overflow: hidden; color: var(--grey-2); }
+    .logo-preview img { width: 100%; height: 100%; object-fit: cover; }
+    .seg button.mode-existing.active, .seg button.mode-new.active { background: var(--accent); color: #fff; }
+  </style>
+</head>
+<body>
+  <div class="app-shell">
+    <aside id="app-nav"></aside>
+    <main class="main">
+      <div class="page">
+        <div class="page-head">
+          <div>
+            <h1>الاشتراكات والتحكم</h1>
+            <p class="subtitle">لكل عميل: غيّر الباقة، وشغّل/وقّف أي وحدة على حِدة. الإيقاف بيمنع الوصول فعليًا.</p>
+          </div>
+        </div>
+
+        <div class="toolbar">
+          <div class="search-box" style="max-width:360px;flex:1">
+            <i class="ti ti-search"></i>
+            <input type="search" id="search" placeholder="ابحث باسم المؤسسة أو مساحة العمل…" />
+          </div>
+          <button class="btn" id="new-ws"><i class="ti ti-plus"></i> مساحة عمل جديدة</button>
+        </div>
+
+        <div id="list"><p class="muted">جاري التحميل…</p></div>
+      </div>
+    </main>
+  </div>
+
+  <script type="module">
+    import { client, requireAdmin, applyProductTheme, escapeHtml, initials } from "../assets/core.js";
+    import { renderShell } from "../assets/shell.js";
+    import { toast, openModal, busy, readImageResized, confirmDialog } from "../assets/ui.js";
+
+    const PRODUCT = "awncare";
+    applyProductTheme(PRODUCT);
+    const session = await requireAdmin();
+    if (!session) throw new Error("not authorized");
+    renderShell(session, { product: PRODUCT, active: "subscriptions" });
+
+    const sb = client(PRODUCT);
+    const listEl = document.getElementById("list");
+    const searchEl = document.getElementById("search");
+
+    let workspaces = [];
+    let catalog = { features: [], plans: [] };
+    const detailCache = new Map(); // workspace_id -> detail
+
+    async function boot() {
+      const [ovRes, catRes] = await Promise.all([
+        sb.rpc("admin_workspaces_overview"),
+        sb.rpc("admin_feature_catalog"),
+      ]);
+      if (ovRes.error) { listEl.innerHTML = `<p class="error-msg">${escapeHtml(ovRes.error.message)}</p>`; return; }
+      if (catRes.error) { listEl.innerHTML = `<p class="error-msg">${escapeHtml(catRes.error.message)}</p>`; return; }
+      workspaces = ovRes.data || [];
+      catalog = catRes.data || { features: [], plans: [] };
+      render();
+      // فتح تلقائي لو جاي من لينك #ws-<id>
+      const hash = location.hash.match(/^#ws-(.+)$/);
+      if (hash) {
+        const card = document.querySelector(`.ws-card[data-id="${CSS.escape(hash[1])}"]`);
+        if (card) { card.scrollIntoView({ behavior: "smooth", block: "center" }); toggleCard(card); }
+      }
+    }
+
+    function currentFiltered() {
+      const q = searchEl.value.trim().toLowerCase();
+      if (!q) return workspaces;
+      return workspaces.filter((w) =>
+        (w.org_name || "").toLowerCase().includes(q) || (w.workspace_name || "").toLowerCase().includes(q));
+    }
+
+    function render() {
+      const items = currentFiltered();
+      if (items.length === 0) { listEl.innerHTML = `<div class="empty-state">مفيش نتايج.</div>`; return; }
+      listEl.innerHTML = items.map((w) => `
+        <div class="ws-card" data-id="${escapeHtml(w.workspace_id)}">
+          <div class="ws-head">
+            <div>
+              <div class="ws-title">${escapeHtml(w.workspace_name)}</div>
+              <div class="ws-org">${escapeHtml(w.org_name)}</div>
+            </div>
+            <span class="pill ${w.plan_name ? "pill-accent" : "pill-critical"}">${w.plan_name ? escapeHtml(w.plan_name) : "بدون باقة"}</span>
+            <span class="pill pill-muted">${w.active_doctors ?? 0} دكتور</span>
+            <i class="ti ti-chevron-down chev"></i>
+          </div>
+          <div class="ws-body"><p class="muted">جاري التحميل…</p></div>
+        </div>`).join("");
+
+      listEl.querySelectorAll(".ws-head").forEach((h) => {
+        h.addEventListener("click", () => toggleCard(h.closest(".ws-card")));
+      });
+    }
+
+    async function toggleCard(card) {
+      if (!card) return;
+      const wasOpen = card.classList.contains("open");
+      card.classList.toggle("open");
+      if (wasOpen) return;
+      const id = card.dataset.id;
+      const body = card.querySelector(".ws-body");
+      if (!detailCache.has(id)) {
+        const { data, error } = await sb.rpc("admin_workspace_detail", { p_workspace_id: id });
+        if (error) { body.innerHTML = `<p class="error-msg">${escapeHtml(error.message)}</p>`; return; }
+        detailCache.set(id, data);
+      }
+      renderDetail(body, id);
+    }
+
+    function renderDetail(body, id) {
+      const d = detailCache.get(id);
+      const planOpts = ['<option value="">— بدون باقة —</option>']
+        .concat(catalog.plans.map((p) =>
+          `<option value="${escapeHtml(p.id)}" ${p.id === d.workspace.plan_id ? "selected" : ""}>${escapeHtml(p.name)}</option>`))
+        .join("");
+
+      const w = d.workspace;
+      const logoHtml = w.logo ? `<img src="${escapeHtml(w.logo)}" alt="">` : escapeHtml(initials(w.name));
+      body.innerHTML = `
+        <div class="brand-row">
+          <div class="brand-logo">${logoHtml}</div>
+          <div style="flex:1">
+            <div><strong>${escapeHtml(w.name)}</strong></div>
+            <div class="muted">${escapeHtml(w.org_name || "")}</div>
+          </div>
+          <button class="btn btn-neutral btn-sm brand-edit"><i class="ti ti-edit"></i> تعديل الاسم/اللوجو</button>
+          <button class="btn btn-neutral btn-sm units-btn"><i class="ti ti-stack-2"></i> أقسام الراوند</button>
+        </div>
+        <div class="plan-row">
+          <label class="lbl">الباقة:</label>
+          <select class="plan-select">${planOpts}</select>
+          <span class="hint">تغيير الباقة بيغيّر الوحدات المتاحة افتراضيًا (تقدر تتجاوزها لكل وحدة تحت).</span>
+        </div>
+        <div class="feat-list"></div>`;
+
+      body.querySelector(".brand-edit").addEventListener("click", () => editBranding(id, body));
+      body.querySelector(".units-btn").addEventListener("click", () => manageUnits(id));
+
+      const featList = body.querySelector(".feat-list");
+      d.features.forEach((f) => featList.appendChild(featRow(id, f)));
+
+      body.querySelector(".plan-select").addEventListener("change", async (e) => {
+        const val = e.target.value || null;
+        e.target.disabled = true;
+        const { data, error } = await sb.rpc("admin_set_workspace_plan", { p_workspace_id: id, p_plan_id: val });
+        e.target.disabled = false;
+        if (error) { toast(error.message, "error"); return; }
+        detailCache.set(id, data);
+        renderDetail(body, id);
+        const ws = workspaces.find((w) => w.workspace_id === id);
+        if (ws) { ws.plan_name = data.workspace.plan_name; }
+        const pill = document.querySelector(`.ws-card[data-id="${CSS.escape(id)}"] .ws-head .pill`);
+        if (pill) { pill.textContent = data.workspace.plan_name || "بدون باقة"; pill.className = "pill " + (data.workspace.plan_name ? "pill-accent" : "pill-critical"); }
+        toast("اتغيّرت الباقة", "good");
+      });
+    }
+
+    async function refreshWorkspaces() {
+      const { data, error } = await sb.rpc("admin_workspaces_overview");
+      if (error) { toast(error.message, "error"); return; }
+      workspaces = data || [];
+      detailCache.clear();
+      render();
+    }
+
+    // ---- مساحة عمل جديدة (+ مؤسسة جديدة اختياريًا) ----
+    async function newWorkspaceModal() {
+      const openBtn = document.getElementById("new-ws");
+      const restoreOpenBtn = busy(openBtn, "…");
+      const { data: orgsData, error: orgsErr } = await sb.rpc("admin_list_orgs");
+      restoreOpenBtn();
+      if (orgsErr) { toast(orgsErr.message, "error"); return; }
+      const orgs = orgsData || [];
+
+      const planOpts = ['<option value="">— بدون باقة —</option>']
+        .concat(catalog.plans.map((p) => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)}</option>`))
+        .join("");
+      const orgOpts = orgs.map((o) =>
+        `<option value="${escapeHtml(o.id)}">${escapeHtml(o.name)} (${o.workspaces_count} مساحة عمل)</option>`).join("");
+
+      const body = document.createElement("div");
+      body.innerHTML = `
+        <div class="seg" role="group" style="margin-bottom:14px">
+          <button type="button" class="mode-existing active" data-m="existing">مؤسسة موجودة</button>
+          <button type="button" class="mode-new" data-m="new">مؤسسة جديدة</button>
+        </div>
+        <div id="org-existing" class="field">
+          <label class="lbl">المؤسسة</label>
+          <select id="org-select">${orgOpts}</select>
+        </div>
+        <div id="org-new" class="field" style="display:none">
+          <label class="lbl">اسم المؤسسة</label>
+          <input type="text" id="org-name" placeholder="مثلاً: مستشفى النور">
+          <label class="lbl" style="margin-top:10px">نوع المؤسسة</label>
+          <select id="org-kind">
+            <option value="solo">عيادة فردية</option>
+            <option value="group">مجموعة عيادات</option>
+            <option value="hospital">مستشفى</option>
+          </select>
+        </div>
+        <div class="field"><label class="lbl">اسم مساحة العمل</label><input type="text" id="ws-name" placeholder="مثلاً: الفرع الرئيسي"></div>
+        <div class="field"><label class="lbl">الباقة</label><select id="ws-plan">${planOpts}</select></div>`;
+
+      let mode = orgs.length ? "existing" : "new";
+      const setMode = (m) => {
+        mode = m;
+        body.querySelectorAll(".seg button").forEach((x) => x.classList.toggle("active", x.dataset.m === m));
+        body.querySelector("#org-existing").style.display = m === "existing" ? "block" : "none";
+        body.querySelector("#org-new").style.display = m === "new" ? "block" : "none";
+      };
+      if (!orgs.length) { body.querySelector(".mode-existing").disabled = true; setMode("new"); }
+      body.querySelectorAll(".seg button").forEach((b) => b.addEventListener("click", () => setMode(b.dataset.m)));
+
+      const m = openModal({
+        title: "مساحة عمل جديدة", icon: "ti-plus", body, actionsLeadSpacer: true,
+        actions: [
+          { label: "إلغاء", variant: "btn-neutral", onClick: (close) => close() },
+          { label: "إنشاء", icon: "ti-check", onClick: async (close) => {
+              const wsName = body.querySelector("#ws-name").value.trim();
+              if (!wsName) { toast("اسم مساحة العمل مطلوب", "error"); return; }
+              const payload = { p_workspace_name: wsName, p_plan_id: body.querySelector("#ws-plan").value || null };
+              if (mode === "existing") {
+                const orgId = body.querySelector("#org-select").value;
+                if (!orgId) { toast("اختار المؤسسة", "error"); return; }
+                payload.p_org_id = orgId;
+              } else {
+                const orgName = body.querySelector("#org-name").value.trim();
+                if (!orgName) { toast("اسم المؤسسة مطلوب", "error"); return; }
+                payload.p_org_name = orgName;
+                payload.p_org_kind = body.querySelector("#org-kind").value;
+              }
+              const btnEl = m.root.querySelector('[data-act="1"]'); const restore = busy(btnEl, "بينشئ…");
+              const { data, error } = await sb.rpc("admin_create_workspace", payload);
+              if (error) { restore(); toast(error.message, "error"); return; }
+              close(); toast("اتنشأت مساحة العمل", "good");
+              await refreshWorkspaces();
+              const card = document.querySelector(`.ws-card[data-id="${CSS.escape(data.workspace_id)}"]`);
+              if (card) { card.scrollIntoView({ behavior: "smooth", block: "center" }); toggleCard(card); }
+            } },
+        ],
+      });
+    }
+
+    // ---- أقسام الراوند (units) ----
+    async function manageUnits(id) {
+      const d = detailCache.get(id);
+      const box = document.createElement("div");
+      box.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px">
+          <span class="muted">الأقسام اللي بتظهر في الراوند لـ «${escapeHtml(d.workspace.name)}».</span>
+          <button class="btn btn-sm" id="add-unit"><i class="ti ti-plus"></i> قسم جديد</button>
+        </div>
+        <div id="units-list"><p class="muted">جاري التحميل…</p></div>`;
+      const listEl = box.querySelector("#units-list");
+      async function refresh() {
+        const { data, error } = await sb.rpc("admin_list_units", { p_workspace_id: id });
+        if (error) { listEl.innerHTML = `<p class="error-msg">${escapeHtml(error.message)}</p>`; return; }
+        const units = data || [];
+        if (units.length === 0) { listEl.innerHTML = `<div class="empty-state" style="padding:18px">مفيش أقسام لسه.</div>`; return; }
+        listEl.innerHTML = "";
+        units.forEach((u) => listEl.appendChild(unitRow(u, refresh)));
+      }
+      box.querySelector("#add-unit").addEventListener("click", () => addUnit(id, refresh));
+      openModal({ title: "أقسام الراوند", subtitle: d.workspace.name, icon: "ti-stack-2", wide: true, body: box, actionsLeadSpacer: true, actions: [{ label: "تمام", onClick: (c) => c() }] });
+      refresh();
+    }
+    function unitRow(u, refresh) {
+      const row = document.createElement("div");
+      row.className = "feat-row";
+      row.innerHTML = `
+        <div class="feat-info"><div class="feat-name">${escapeHtml(u.name)}</div>
+          <div class="feat-desc">${u.in_use > 0 ? `مستخدم في ${u.in_use} حالة` : "مش مستخدم"}</div></div>
+        <div class="row-actions"></div>`;
+      const acts = row.querySelector(".row-actions");
+      const rn = document.createElement("button"); rn.className = "icon-btn"; rn.title = "تغيير الاسم"; rn.innerHTML = `<i class="ti ti-edit"></i>`;
+      rn.addEventListener("click", () => renameUnit(u, refresh));
+      const del = document.createElement("button"); del.className = "icon-btn"; del.title = "حذف"; del.innerHTML = `<i class="ti ti-trash"></i>`;
+      del.addEventListener("click", () => deleteUnit(u, refresh));
+      acts.appendChild(rn); acts.appendChild(del);
+      return row;
+    }
+    function addUnit(id, refresh) {
+      const body = document.createElement("div");
+      body.innerHTML = `<div class="field"><label class="lbl">اسم القسم</label><input type="text" id="un" placeholder="مثلاً: باطنة"></div>`;
+      const m = openModal({ title: "قسم جديد", icon: "ti-plus", body, actionsLeadSpacer: true, actions: [
+        { label: "إلغاء", variant: "btn-neutral", onClick: (c) => c() },
+        { label: "إضافة", icon: "ti-check", onClick: async (close) => {
+            const n = body.querySelector("#un").value.trim();
+            if (!n) { toast("اكتب اسم القسم", "error"); return; }
+            const btn = m.root.querySelector('[data-act="1"]'); const restore = busy(btn, "بيحفظ…");
+            const { error } = await sb.rpc("admin_create_unit", { p_workspace_id: id, p_name: n });
+            if (error) { restore(); toast(error.message, "error"); return; }
+            close(); toast("اتضاف القسم", "good"); refresh();
+          } },
+      ]});
+    }
+    function renameUnit(u, refresh) {
+      const body = document.createElement("div");
+      body.innerHTML = `<div class="field"><label class="lbl">اسم القسم</label><input type="text" id="un"></div>`;
+      body.querySelector("#un").value = u.name || "";
+      const m = openModal({ title: "تغيير اسم القسم", icon: "ti-edit", body, actionsLeadSpacer: true, actions: [
+        { label: "إلغاء", variant: "btn-neutral", onClick: (c) => c() },
+        { label: "حفظ", icon: "ti-check", onClick: async (close) => {
+            const n = body.querySelector("#un").value.trim();
+            if (!n) { toast("الاسم مطلوب", "error"); return; }
+            const btn = m.root.querySelector('[data-act="1"]'); const restore = busy(btn, "بيحفظ…");
+            const { error } = await sb.rpc("admin_rename_unit", { p_unit_id: u.id, p_name: n });
+            if (error) { restore(); toast(error.message, "error"); return; }
+            close(); toast("اتحفظ", "good"); refresh();
+          } },
+      ]});
+    }
+    async function deleteUnit(u, refresh) {
+      const ok = await confirmDialog({ title: "حذف القسم؟", icon: "ti-trash", danger: true, confirmLabel: "حذف", message: `هيتحذف قسم «${u.name}». مش هينفع لو مستخدم في حالات — في الحالة دي غيّر اسمه بدل ما تمسحه.` });
+      if (!ok) return;
+      const { error } = await sb.rpc("admin_delete_unit", { p_unit_id: u.id });
+      if (error) { toast(error.message, "error"); return; }
+      toast("اتحذف", "good"); refresh();
+    }
+
+    function editBranding(id, body) {
+      const d = detailCache.get(id);
+      const w = d.workspace;
+      let logoVal = w.logo || null;
+      let logoChanged = false;
+
+      const form = document.createElement("div");
+      form.innerHTML = `
+        <div class="field">
+          <label class="lbl">اللوجو</label>
+          <div class="logo-edit-box">
+            <div class="logo-preview" id="lp"></div>
+            <div style="display:flex;flex-direction:column;gap:6px">
+              <button type="button" class="btn btn-neutral btn-sm" id="lup"><i class="ti ti-upload"></i> رفع صورة</button>
+              <button type="button" class="btn btn-danger-outline btn-sm" id="lrm"><i class="ti ti-trash"></i> مسح</button>
+            </div>
+            <input type="file" id="lfile" accept="image/*" hidden>
+          </div>
+        </div>
+        <div class="field"><label class="lbl">اسم مساحة العمل</label><input type="text" id="wsn"></div>
+        <div class="field"><label class="lbl">اسم المؤسسة</label><input type="text" id="orgn"></div>`;
+      form.querySelector("#wsn").value = w.name || "";
+      form.querySelector("#orgn").value = w.org_name || "";
+
+      const renderLogo = () => {
+        form.querySelector("#lp").innerHTML = logoVal ? `<img src="${escapeHtml(logoVal)}" alt="">` : `<i class="ti ti-photo"></i>`;
+      };
+      renderLogo();
+      form.querySelector("#lup").addEventListener("click", () => form.querySelector("#lfile").click());
+      form.querySelector("#lfile").addEventListener("change", async (e) => {
+        const f = e.target.files[0]; e.target.value = "";
+        if (!f) return;
+        if (!f.type.startsWith("image/")) { toast("اختار صورة", "error"); return; }
+        try { logoVal = await readImageResized(f, 256); logoChanged = true; renderLogo(); }
+        catch { toast("مقدرش يقرا الصورة", "error"); }
+      });
+      form.querySelector("#lrm").addEventListener("click", () => { if (logoVal) { logoVal = null; logoChanged = true; renderLogo(); } });
+
+      const m = openModal({
+        title: "تعديل الاسم واللوجو", icon: "ti-edit", body: form, actionsLeadSpacer: true,
+        actions: [
+          { label: "إلغاء", variant: "btn-neutral", onClick: (close) => close() },
+          { label: "حفظ", icon: "ti-check", onClick: async (close) => {
+              const wsName = form.querySelector("#wsn").value.trim();
+              const orgName = form.querySelector("#orgn").value.trim();
+              if (!wsName || !orgName) { toast("الأسماء مطلوبة", "error"); return; }
+              const btn = m.root.querySelector('[data-act="1"]'); const restore = busy(btn, "بيحفظ…");
+              try {
+                if (wsName !== w.name) { const r = await sb.rpc("admin_rename_workspace", { p_workspace_id: id, p_name: wsName }); if (r.error) throw r.error; }
+                if (orgName !== (w.org_name || "")) { const r = await sb.rpc("admin_rename_org", { p_org_id: w.org_id, p_name: orgName }); if (r.error) throw r.error; }
+                if (logoChanged) { const r = await sb.rpc("admin_set_workspace_logo", { p_workspace_id: id, p_logo: logoVal || "" }); if (r.error) throw r.error; }
+              } catch (err) { restore(); toast(err.message || "خطأ", "error"); return; }
+              w.name = wsName; w.org_name = orgName; w.logo = logoVal;
+              const wsRow = workspaces.find((x) => x.workspace_id === id);
+              if (wsRow) { wsRow.workspace_name = wsName; wsRow.org_name = orgName; }
+              const card = document.querySelector(`.ws-card[data-id="${CSS.escape(id)}"]`);
+              if (card) { card.querySelector(".ws-title").textContent = wsName; card.querySelector(".ws-org").textContent = orgName; }
+              renderDetail(body, id);
+              close(); toast("اتحفظ", "good");
+            } },
+        ],
+      });
+    }
+
+    function featRow(id, f) {
+      const state = f.override === true ? "on" : f.override === false ? "off" : "inherit";
+      const row = document.createElement("div");
+      row.className = "feat-row";
+      row.innerHTML = `
+        <div class="feat-info">
+          <div class="feat-name">${escapeHtml(f.label)}${f.bot_key ? ` <span class="pill pill-muted">بوت</span>` : ""}</div>
+          ${f.description ? `<div class="feat-desc">${escapeHtml(f.description)}</div>` : ""}
+        </div>
+        <div class="feat-eff">
+          <span class="pill ${f.effective ? "pill-good" : "pill-muted"}">${f.effective ? "مفعّل" : "موقوف"}</span>
+          <div class="hint">${f.override === null ? (f.in_plan ? "من الباقة" : "مش في الباقة") : "يدوي"}</div>
+        </div>
+        <div class="seg" role="group">
+          <button class="on ${state === "on" ? "active" : ""}" data-s="on">تشغيل</button>
+          <button class="inherit ${state === "inherit" ? "active" : ""}" data-s="inherit">وراثة</button>
+          <button class="off ${state === "off" ? "active" : ""}" data-s="off">إيقاف</button>
+        </div>`;
+
+      row.querySelectorAll(".seg button").forEach((b) => {
+        b.addEventListener("click", async () => {
+          const s = b.dataset.s;
+          row.querySelectorAll(".seg button").forEach((x) => x.disabled = true);
+          const { data, error } = await sb.rpc("admin_set_workspace_feature", {
+            p_workspace_id: id, p_feature_key: f.key, p_state: s,
+          });
+          if (error) { toast(error.message, "error"); row.querySelectorAll(".seg button").forEach((x) => x.disabled = false); return; }
+          detailCache.set(id, data);
+          const body = document.querySelector(`.ws-card[data-id="${CSS.escape(id)}"] .ws-body`);
+          renderDetail(body, id);
+          toast("اتحفظ", "good", 1400);
+        });
+      });
+      return row;
+    }
+
+    searchEl.addEventListener("input", render);
+    document.getElementById("new-ws").addEventListener("click", newWorkspaceModal);
+    boot();
+  </script>
+</body>
+</html>
