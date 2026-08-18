@@ -1,0 +1,248 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>الباقات — عون كير</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css" />
+  <link rel="stylesheet" href="../assets/style.css" />
+  <script src="../config.js"></script>
+  <style>
+    .plan-card { border: 1px solid var(--rule); border-radius: var(--radius-lg); background: var(--white); margin-bottom: 12px; box-shadow: var(--shadow); overflow: hidden; }
+    .plan-head { display: flex; align-items: center; gap: 14px; padding: 15px 18px; cursor: pointer; }
+    .plan-head:hover { background: var(--paper); }
+    .plan-head .chev { transition: transform .18s; color: var(--grey-2); margin-inline-start: auto; }
+    .plan-card.open .plan-head .chev { transform: rotate(180deg); }
+    .plan-body { display: none; padding: 4px 18px 18px; border-top: 1px solid var(--rule); }
+    .plan-card.open .plan-body { display: block; }
+    .plan-title { font-weight: 700; color: var(--ink-strong); }
+    .plan-key { font-size: .78em; color: var(--grey-2); font-family: monospace; }
+    .sec-h { font-size: .82em; text-transform: uppercase; letter-spacing: .05em; color: var(--grey-2); margin: 16px 0 8px; }
+    .feat-row { display: flex; align-items: center; gap: 12px; padding: 10px 2px; border-bottom: 1px solid var(--rule); flex-wrap: wrap; }
+    .feat-row:last-child { border-bottom: none; }
+    .feat-info { min-width: 0; flex: 1; }
+    .feat-name { font-weight: 600; color: var(--ink-strong); font-size: .92em; }
+    .quota-row { display: flex; align-items: center; gap: 12px; padding: 10px 2px; border-bottom: 1px solid var(--rule); }
+    .quota-row:last-child { border-bottom: none; }
+    .quota-row label { flex: 1; font-size: .9em; font-weight: 600; }
+    .quota-row input[type="number"] { width: 100px; }
+    .quota-row .unlim { font-size: .82em; color: var(--grey-2); display: flex; align-items: center; gap: 5px; }
+  </style>
+</head>
+<body>
+  <div class="app-shell">
+    <aside id="app-nav"></aside>
+    <main class="main">
+      <div class="page">
+        <div class="page-head">
+          <div>
+            <h1>الباقات</h1>
+            <p class="subtitle">تحكّم كامل في باقات الاشتراك: المميزات المتاحة افتراضيًا، وحدود الاستخدام الشهرية لكل موديول.</p>
+          </div>
+        </div>
+
+        <div class="toolbar">
+          <div style="flex:1"></div>
+          <button class="btn" id="new-plan"><i class="ti ti-plus"></i> باقة جديدة</button>
+        </div>
+
+        <div id="list"><p class="muted">جاري التحميل…</p></div>
+      </div>
+    </main>
+  </div>
+
+  <script type="module">
+    import { client, requireAdmin, applyProductTheme, escapeHtml } from "../assets/core.js";
+    import { renderShell } from "../assets/shell.js";
+    import { toast, openModal, busy, confirmDialog } from "../assets/ui.js";
+
+    const PRODUCT = "awncare";
+    applyProductTheme(PRODUCT);
+    const session = await requireAdmin();
+    if (!session) throw new Error("not authorized");
+    renderShell(session, { product: PRODUCT, active: "plans" });
+
+    const sb = client(PRODUCT);
+    const listEl = document.getElementById("list");
+    const MODULE_LABEL = { ed: "الطوارئ", round: "الراوند", clinic: "العيادة" };
+
+    let catalog = { features: [], plans: [] };
+
+    async function boot() {
+      const { data, error } = await sb.rpc("admin_feature_catalog");
+      if (error) { listEl.innerHTML = `<p class="error-msg">${escapeHtml(error.message)}</p>`; return; }
+      catalog = data || { features: [], plans: [] };
+      render();
+    }
+
+    function render() {
+      if (catalog.plans.length === 0) { listEl.innerHTML = `<div class="empty-state">مفيش باقات لسه. دوس «باقة جديدة».</div>`; return; }
+      listEl.innerHTML = catalog.plans.map((p) => `
+        <div class="plan-card" data-id="${escapeHtml(p.id)}">
+          <div class="plan-head">
+            <div>
+              <div class="plan-title">${escapeHtml(p.name)} ${!p.is_active ? '<span class="pill pill-muted">متوقفة</span>' : ""}</div>
+              <div class="plan-key">${escapeHtml(p.key)}</div>
+            </div>
+            <span class="pill pill-muted">${p.workspaces_count} عميل</span>
+            <i class="ti ti-chevron-down chev"></i>
+          </div>
+          <div class="plan-body"></div>
+        </div>`).join("");
+
+      listEl.querySelectorAll(".plan-head").forEach((h) => {
+        h.addEventListener("click", () => {
+          const card = h.closest(".plan-card");
+          const wasOpen = card.classList.contains("open");
+          card.classList.toggle("open");
+          if (!wasOpen) renderPlanBody(card);
+        });
+      });
+    }
+
+    function renderPlanBody(card) {
+      const id = card.dataset.id;
+      const p = catalog.plans.find((x) => x.id === id);
+      const body = card.querySelector(".plan-body");
+
+      body.innerHTML = `
+        <div class="toolbar" style="padding:10px 0">
+          <button class="btn btn-neutral btn-sm edit-plan"><i class="ti ti-edit"></i> تعديل الباقة</button>
+          <button class="btn btn-danger-outline btn-sm del-plan"><i class="ti ti-trash"></i> حذف</button>
+        </div>
+        <div class="sec-h">حدود الاستخدام الشهري</div>
+        <div class="quota-list"></div>
+        <div class="sec-h">المميزات المتاحة بالباقة دي افتراضيًا</div>
+        <div class="feat-list"></div>`;
+
+      body.querySelector(".edit-plan").addEventListener("click", () => editPlan(p));
+      body.querySelector(".del-plan").addEventListener("click", () => deletePlan(p));
+
+      const quotaList = body.querySelector(".quota-list");
+      ["ed", "round", "clinic"].forEach((mk) => {
+        const q = (p.quotas || []).find((x) => x.module_key === mk);
+        const row = document.createElement("div");
+        row.className = "quota-row";
+        row.innerHTML = `
+          <label>${MODULE_LABEL[mk]}</label>
+          <input type="number" min="1" class="q-num" value="${q ? q.max_per_period : ""}" placeholder="بلا حد" ${q ? "" : "disabled"}>
+          <label class="unlim"><input type="checkbox" class="q-unlim" ${q ? "" : "checked"}> بلا حد</label>`;
+        const numInp = row.querySelector(".q-num");
+        const unlimBox = row.querySelector(".q-unlim");
+        async function save() {
+          const unlimited = unlimBox.checked;
+          numInp.disabled = unlimited;
+          const val = unlimited ? null : (parseInt(numInp.value, 10) || null);
+          if (!unlimited && !val) return;
+          const { error } = await sb.rpc("admin_set_plan_quota", { p_plan_id: id, p_module_key: mk, p_max_per_period: val });
+          if (error) { toast(error.message, "error"); return; }
+          const idx = (p.quotas || []).findIndex((x) => x.module_key === mk);
+          if (unlimited) { if (idx !== -1) p.quotas.splice(idx, 1); }
+          else if (idx !== -1) p.quotas[idx].max_per_period = val;
+          else (p.quotas = p.quotas || []).push({ module_key: mk, max_per_period: val });
+          toast("اتحفظ", "good", 1200);
+        }
+        unlimBox.addEventListener("change", save);
+        numInp.addEventListener("change", save);
+        quotaList.appendChild(row);
+      });
+
+      const featList = body.querySelector(".feat-list");
+      catalog.features.forEach((f) => {
+        const on = (p.feature_keys || []).includes(f.key);
+        const row = document.createElement("div");
+        row.className = "feat-row";
+        row.innerHTML = `
+          <div class="feat-info">
+            <div class="feat-name">${escapeHtml(f.label)}${f.bot_key ? ` <span class="pill pill-muted">بوت</span>` : ""}</div>
+            ${f.description ? `<div class="hint">${escapeHtml(f.description)}</div>` : ""}
+          </div>
+          <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" class="f-on" ${on ? "checked" : ""}> مفعّلة</label>`;
+        row.querySelector(".f-on").addEventListener("change", async (e) => {
+          const { error } = await sb.rpc("admin_set_plan_feature", { p_plan_id: id, p_feature_key: f.key, p_enabled: e.target.checked });
+          if (error) { toast(error.message, "error"); e.target.checked = !e.target.checked; return; }
+          p.feature_keys = p.feature_keys || [];
+          if (e.target.checked) { if (!p.feature_keys.includes(f.key)) p.feature_keys.push(f.key); }
+          else { p.feature_keys = p.feature_keys.filter((k) => k !== f.key); }
+          toast("اتحفظ", "good", 1200);
+        });
+        featList.appendChild(row);
+      });
+    }
+
+    function planFormBody(p) {
+      const b = document.createElement("div");
+      b.innerHTML = `
+        ${p ? "" : `<div class="field"><label class="lbl">مفتاح الباقة (بالإنجليزي، فريد)</label><input type="text" id="pk" placeholder="مثلاً: ed_100"></div>`}
+        <div class="field"><label class="lbl">اسم الباقة</label><input type="text" id="pn" placeholder="مثلاً: الطوارئ — 100 حالة"></div>
+        <div class="field"><label class="lbl">أقصى عدد أطباء (اختياري)</label><input type="number" id="pms" min="1"></div>
+        <div class="field"><label class="lbl">أقصى عدد مساحات عمل (اختياري)</label><input type="number" id="pmw" min="1"></div>
+        ${p ? `<label style="display:flex;align-items:center;gap:8px;margin-top:10px"><input type="checkbox" id="pa" ${p.is_active ? "checked" : ""}> الباقة نشطة (تظهر كخيار عند ربط عميل)</label>` : ""}`;
+      if (p) {
+        b.querySelector("#pn").value = p.name || "";
+        if (p.max_staff) b.querySelector("#pms").value = p.max_staff;
+        if (p.max_workspaces) b.querySelector("#pmw").value = p.max_workspaces;
+      }
+      return b;
+    }
+
+    function newPlanModal() {
+      const b = planFormBody(null);
+      const m = openModal({ title: "باقة جديدة", icon: "ti-plus", body: b, actionsLeadSpacer: true, actions: [
+        { label: "إلغاء", variant: "btn-neutral", onClick: (c) => c() },
+        { label: "إنشاء", icon: "ti-check", onClick: async (close) => {
+            const key = b.querySelector("#pk").value.trim();
+            const name = b.querySelector("#pn").value.trim();
+            if (!key || !name) { toast("المفتاح والاسم مطلوبين", "error"); return; }
+            const btn = m.root.querySelector('[data-act="1"]'); const restore = busy(btn, "بينشئ…");
+            const { error } = await sb.rpc("admin_create_plan", {
+              p_key: key, p_name: name,
+              p_max_staff: parseInt(b.querySelector("#pms").value, 10) || null,
+              p_max_workspaces: parseInt(b.querySelector("#pmw").value, 10) || null,
+            });
+            if (error) { restore(); toast(error.message, "error"); return; }
+            close(); toast("اتنشأت الباقة", "good");
+            boot();
+          } },
+      ]});
+    }
+
+    function editPlan(p) {
+      const b = planFormBody(p);
+      const m = openModal({ title: "تعديل الباقة", icon: "ti-edit", body: b, actionsLeadSpacer: true, actions: [
+        { label: "إلغاء", variant: "btn-neutral", onClick: (c) => c() },
+        { label: "حفظ", icon: "ti-check", onClick: async (close) => {
+            const name = b.querySelector("#pn").value.trim();
+            if (!name) { toast("الاسم مطلوب", "error"); return; }
+            const btn = m.root.querySelector('[data-act="1"]'); const restore = busy(btn, "بيحفظ…");
+            const { error } = await sb.rpc("admin_update_plan", {
+              p_plan_id: p.id, p_name: name,
+              p_max_staff: parseInt(b.querySelector("#pms").value, 10) || null,
+              p_max_workspaces: parseInt(b.querySelector("#pmw").value, 10) || null,
+              p_is_active: b.querySelector("#pa").checked,
+            });
+            if (error) { restore(); toast(error.message, "error"); return; }
+            close(); toast("اتحفظ", "good");
+            boot();
+          } },
+      ]});
+    }
+
+    async function deletePlan(p) {
+      if (p.workspaces_count > 0) { toast(`الباقة دي مستخدمة في ${p.workspaces_count} مساحة عمل — انقلهم لباقة تانية الأول`, "error"); return; }
+      const ok = await confirmDialog({ title: "حذف الباقة؟", icon: "ti-trash", danger: true, confirmLabel: "حذف", message: `هتتحذف باقة «${p.name}» نهائيًا.` });
+      if (!ok) return;
+      const { error } = await sb.rpc("admin_delete_plan", { p_plan_id: p.id });
+      if (error) { toast(error.message, "error"); return; }
+      toast("اتحذفت الباقة", "good");
+      boot();
+    }
+
+    document.getElementById("new-plan").addEventListener("click", newPlanModal);
+    boot();
+  </script>
+</body>
+</html>

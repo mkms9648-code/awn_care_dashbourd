@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>الإعلانات — عون كير</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css" />
+  <link rel="stylesheet" href="../assets/style.css" />
+  <script src="../config.js"></script>
+  <style>
+    .compose-card { background: var(--white); border: 1px solid var(--rule); border-radius: var(--radius-lg); box-shadow: var(--shadow); padding: 20px; margin-bottom: 20px; max-width: 620px; }
+    .hist-row { display: flex; align-items: flex-start; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--rule); }
+    .hist-row:last-child { border-bottom: none; }
+    .hist-title { font-weight: 600; color: var(--ink-strong); }
+    .hist-meta { font-size: .78em; color: var(--grey-2); margin-top: 2px; }
+    .hist-body { font-size: .88em; color: var(--ink); margin-top: 4px; }
+    #target-seg button.active { background: var(--accent); color: #fff; }
+  </style>
+</head>
+<body>
+  <div class="app-shell">
+    <aside id="app-nav"></aside>
+    <main class="main">
+      <div class="page">
+        <div class="page-head">
+          <div>
+            <h1>الإعلانات</h1>
+            <p class="subtitle">ابعت خبر أو تحديث للأطباء — بيوصلهم كإشعار push وبيبان في تاب الإشعارات بتاعهم داخل التطبيق.</p>
+          </div>
+        </div>
+
+        <div class="compose-card">
+          <div class="field">
+            <label class="lbl">لمين؟</label>
+            <div class="seg" role="group" id="target-seg">
+              <button type="button" class="active" data-t="all">كل العملاء</button>
+              <button type="button" data-t="workspace">مساحة عمل محددة</button>
+              <button type="button" data-t="doctor">دكتور محدد</button>
+            </div>
+          </div>
+          <div class="field" id="ws-field" style="display:none">
+            <label class="lbl">مساحة العمل</label>
+            <select id="ws-select"></select>
+          </div>
+          <div class="field" id="doc-field" style="display:none">
+            <label class="lbl">الدكتور</label>
+            <select id="doc-select"></select>
+          </div>
+          <div class="field">
+            <label class="lbl">عنوان الإشعار</label>
+            <input type="text" id="n-title" placeholder="مثلاً: تحديث جديد في التطبيق">
+          </div>
+          <div class="field">
+            <label class="lbl">التفاصيل</label>
+            <textarea id="n-body" rows="4" placeholder="اكتب تفاصيل الخبر هنا…"></textarea>
+          </div>
+          <button class="btn" id="send-btn" style="width:100%;justify-content:center"><i class="ti ti-send"></i> إرسال</button>
+        </div>
+
+        <h3 style="margin:0 0 10px">آخر الإعلانات</h3>
+        <div class="card" id="history"><p class="muted">جاري التحميل…</p></div>
+      </div>
+    </main>
+  </div>
+
+  <script type="module">
+    import { client, requireAdmin, applyProductTheme, escapeHtml, fmtDate, productConfig } from "../assets/core.js";
+    import { renderShell } from "../assets/shell.js";
+    import { toast, busy } from "../assets/ui.js";
+
+    const PRODUCT = "awncare";
+    applyProductTheme(PRODUCT);
+    const session = await requireAdmin();
+    if (!session) throw new Error("not authorized");
+    renderShell(session, { product: PRODUCT, active: "announcements" });
+
+    const sb = client(PRODUCT);
+    const pushEndpoint = productConfig(PRODUCT).NOTIFICATION_PUSH_ENDPOINT;
+
+    let workspaces = [];
+    let doctors = [];
+    let target = "all";
+
+    const wsField = document.getElementById("ws-field");
+    const docField = document.getElementById("doc-field");
+    const wsSelect = document.getElementById("ws-select");
+    const docSelect = document.getElementById("doc-select");
+
+    document.querySelectorAll("#target-seg button").forEach((b) => {
+      b.addEventListener("click", () => {
+        target = b.dataset.t;
+        document.querySelectorAll("#target-seg button").forEach((x) => x.classList.toggle("active", x === b));
+        wsField.style.display = (target === "workspace" || target === "doctor") ? "block" : "none";
+        docField.style.display = (target === "doctor") ? "block" : "none";
+        if (target === "doctor") loadDoctorsForWs();
+      });
+    });
+
+    wsSelect.addEventListener("change", () => { if (target === "doctor") loadDoctorsForWs(); });
+
+    async function loadDoctorsForWs() {
+      const wid = wsSelect.value;
+      docSelect.innerHTML = `<option>جاري التحميل…</option>`;
+      const { data, error } = await sb.rpc("admin_list_doctors", { p_workspace_id: wid });
+      if (error) { docSelect.innerHTML = `<option>خطأ</option>`; return; }
+      doctors = data || [];
+      docSelect.innerHTML = doctors.map((d) => `<option value="${escapeHtml(d.staff_id)}">${escapeHtml(d.full_name)}</option>`).join("")
+        || `<option value="">مفيش دكاترة في مساحة العمل دي</option>`;
+    }
+
+    async function boot() {
+      const { data } = await sb.rpc("admin_workspaces_overview");
+      workspaces = data || [];
+      wsSelect.innerHTML = workspaces.map((w) => `<option value="${escapeHtml(w.workspace_id)}">${escapeHtml(w.workspace_name)} — ${escapeHtml(w.org_name)}</option>`).join("");
+      loadHistory();
+    }
+
+    async function loadHistory() {
+      const hist = document.getElementById("history");
+      const { data, error } = await sb.rpc("admin_notifications_history", { p_workspace_id: null, p_limit: 30 });
+      if (error) { hist.innerHTML = `<p class="error-msg">${escapeHtml(error.message)}</p>`; return; }
+      const rows = data || [];
+      if (rows.length === 0) { hist.innerHTML = `<div class="empty-state">لسه مفيش إعلانات اتبعتت.</div>`; return; }
+      hist.innerHTML = rows.map((n) => `
+        <div class="hist-row">
+          <i class="ti ti-campaign" style="color:var(--accent);margin-top:3px"></i>
+          <div style="flex:1">
+            <div class="hist-title">${escapeHtml(n.title)}</div>
+            <div class="hist-body">${escapeHtml(n.body)}</div>
+            <div class="hist-meta">${n.is_broadcast ? escapeHtml(n.workspace_name) + " — كل الأطباء" : escapeHtml(n.workspace_name) + " — " + escapeHtml(n.staff_name || "")} · ${fmtDate(n.created_at)}</div>
+          </div>
+        </div>`).join("");
+    }
+
+    async function sendPush(tokens, title, body) {
+      if (!tokens.length || !pushEndpoint) return;
+      try {
+        await fetch(pushEndpoint, {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ push_tokens: tokens, title, body }),
+        });
+      } catch { /* الإشعار داخل التطبيق اتسجل برضه حتى لو الـ push فشل */ }
+    }
+
+    document.getElementById("send-btn").addEventListener("click", async () => {
+      const title = document.getElementById("n-title").value.trim();
+      const body = document.getElementById("n-body").value.trim();
+      if (!title || !body) { toast("العنوان والتفاصيل مطلوبين", "error"); return; }
+      if ((target === "workspace" || target === "doctor") && !wsSelect.value) { toast("اختار مساحة عمل", "error"); return; }
+      if (target === "doctor" && !docSelect.value) { toast("اختار دكتور", "error"); return; }
+
+      const btn = document.getElementById("send-btn");
+      const restore = busy(btn, "بيبعت…");
+      try {
+        let tokens = [];
+        if (target === "all") {
+          for (const w of workspaces) {
+            const { data, error } = await sb.rpc("admin_send_notification", {
+              p_workspace_id: w.workspace_id, p_staff_id: null, p_title: title, p_body: body,
+            });
+            if (error) throw error;
+            tokens = tokens.concat(data.push_tokens || []);
+          }
+        } else if (target === "workspace") {
+          const { data, error } = await sb.rpc("admin_send_notification", {
+            p_workspace_id: wsSelect.value, p_staff_id: null, p_title: title, p_body: body,
+          });
+          if (error) throw error;
+          tokens = data.push_tokens || [];
+        } else {
+          const { data, error } = await sb.rpc("admin_send_notification", {
+            p_workspace_id: wsSelect.value, p_staff_id: docSelect.value, p_title: title, p_body: body,
+          });
+          if (error) throw error;
+          tokens = data.push_tokens || [];
+        }
+        tokens = [...new Set(tokens)];
+        await sendPush(tokens, title, body);
+        restore();
+        toast(`اتبعت الإعلان (وصل push لـ ${tokens.length} جهاز)`, "good");
+        document.getElementById("n-title").value = "";
+        document.getElementById("n-body").value = "";
+        loadHistory();
+      } catch (err) {
+        restore();
+        toast(err.message || "خطأ", "error");
+      }
+    });
+
+    boot();
+  </script>
+</body>
+</html>

@@ -126,13 +126,47 @@
     }
 
     function renderBadges() {
-      badgesEl.innerHTML = `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-        <span class="muted">الوحدات المتاحة للدكتور:</span>
-        ${BOTS.map((b) => {
-          const on = features.includes(b.feature);
-          return `<span class="pill ${on ? "pill-good" : "pill-muted"}"><i class="ti ${b.icon}"></i> ${b.label} · ${on ? "مفتوحة" : "مقفولة"}</span>`;
-        }).join("")}
+      const ov = cur.feature_overrides || {};
+      badgesEl.innerHTML = `<div style="display:flex;flex-direction:column;gap:10px">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <span class="muted">الوحدات المتاحة للدكتور:</span>
+          ${BOTS.map((b) => {
+            const on = features.includes(b.feature);
+            return `<span class="pill ${on ? "pill-good" : "pill-muted"}"><i class="ti ${b.icon}"></i> ${b.label} · ${on ? "مفتوحة" : "مقفولة"}</span>`;
+          }).join("")}
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <span class="muted">تحكم في الدكتور ده تحديدًا (فوق ما مساحة العمل مسموح بيه، بيقدر يضيّق بس مش يوسّع):</span>
+          ${BOTS.map((b) => {
+            const locked = ov[b.feature] === false;
+            return `<div style="display:flex;align-items:center;gap:10px">
+              <span style="min-width:90px;font-size:.85em">${b.label}</span>
+              <div class="seg" role="group" data-feature="${b.feature}">
+                <button class="on ${!locked ? "active" : ""}" data-s="on">مسموح</button>
+                <button class="off ${locked ? "active" : ""}" data-s="off">مقفول عليه</button>
+              </div>
+            </div>`;
+          }).join("")}
+        </div>
       </div>`;
+
+      badgesEl.querySelectorAll(".seg[data-feature]").forEach((seg) => {
+        seg.querySelectorAll("button").forEach((btn) => {
+          btn.addEventListener("click", async () => {
+            const state = btn.dataset.s;
+            seg.querySelectorAll("button").forEach((b) => b.disabled = true);
+            const { error } = await sb.rpc("admin_set_staff_feature", {
+              p_staff_id: cur.staff_id, p_feature_key: seg.dataset.feature, p_state: state,
+            });
+            if (error) { toast(error.message, "error"); seg.querySelectorAll("button").forEach((b) => b.disabled = false); return; }
+            cur.feature_overrides = cur.feature_overrides || {};
+            if (state === "off") cur.feature_overrides[seg.dataset.feature] = false;
+            else delete cur.feature_overrides[seg.dataset.feature];
+            renderBadges();
+            toast("اتحفظ", "good", 1400);
+          });
+        });
+      });
     }
 
     function render() {

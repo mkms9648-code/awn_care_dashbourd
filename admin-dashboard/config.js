@@ -34,6 +34,9 @@ window.APP_CONFIG = {
       // ويب-هوك تفاصيل تنفيذ n8n (proxy): بياخد {execution_id}، وبينادي على
       // n8n API نفسه (المفتاح مخزّن جوّه n8n بس) ويرجّع تفاصيل الـ nodes/الأدوات.
       EXECUTION_DETAIL_ENDPOINT: "https://n8n-c1bz.srv1841520.hstgr.cloud/webhook/execution-detail-proxy",
+      // ويب-هوك إرسال إشعار push (n8n): بياخد {push_tokens[],title,body}
+      // وبيبعت لكل توكن عبر FCM HTTP v1 — بتستخدمه صفحة الإعلانات.
+      NOTIFICATION_PUSH_ENDPOINT: "https://n8n-c1bz.srv1841520.hstgr.cloud/webhook/send-notification-push",
     },
     fathi: {
       label: "فتحي ميزانية",

@@ -8,9 +8,11 @@ const NAV = {
   awncare: [
     { key: "overview",      file: "overview.html",      label: "نظرة عامة",        icon: "ti-layout-dashboard" },
     { key: "subscriptions", file: "subscriptions.html", label: "الاشتراكات والتحكم", icon: "ti-toggle-right-filled" },
+    { key: "plans",         file: "plans.html",         label: "الباقات",           icon: "ti-package" },
     { key: "doctors",       file: "doctors.html",       label: "الأطباء والدخول",   icon: "ti-user-cog" },
     { key: "units",         file: "units.html",         label: "الأقسام",           icon: "ti-building-hospital" },
     { key: "viewas",        file: "view-as.html",       label: "تجربة الدكتور",     icon: "ti-eye" },
+    { key: "announcements", file: "announcements.html", label: "الإعلانات",         icon: "ti-speakerphone" },
     { key: "conversations", file: "conversations.html", label: "المحادثات",         icon: "ti-message-circle" },
     { key: "assistant",     file: "assistant.html",     label: "مساعد المبيعات",    icon: "ti-sparkles" },
     { key: "bots",          file: "bots.html",          label: "البرومبتات والأدوات", icon: "ti-robot" },
