@@ -114,21 +114,39 @@
         toast("اتحفظ", "good", 1200); return true;
       }));
 
+      // كل عنصر في الكتالوج معاه "default" — 'on' (غائب = مفعّل، زي الوحدات
+      // العادية) أو 'off' (غائب = موقوف، للوحدات المخصصة الاختيارية زي تابات
+      // المشغل — لازم تتفعّل بالزرار صراحةً بدل ما تظهر لكل الشركات تلقائي)
+      function addToggle(f) {
+        const isOptIn = (f.default || "on") === "off";
+        const raw = c.feature_flags?.[f.key];
+        const enabled = raw === undefined ? !isOptIn : raw === true;
+        body.appendChild(toggleRow(f.label, enabled, async (val) => {
+          const state = val === !isOptIn ? "inherit" : (val ? "on" : "off");
+          const { error } = await rpc("admin_set_company_feature", { p_company_id: c.id, p_key: f.key, p_state: state });
+          if (error) { toast(error.message, "error"); return false; }
+          c.feature_flags = c.feature_flags || {};
+          if (state === "inherit") delete c.feature_flags[f.key]; else c.feature_flags[f.key] = val;
+          toast("اتحفظ", "good", 1200); return true;
+        }));
+      }
+
+      const standard = catalog.filter((f) => (f.default || "on") !== "off");
+      const optIn = catalog.filter((f) => (f.default || "on") === "off");
+
       const head = document.createElement("div");
       head.className = "feat-row head-row";
       head.innerHTML = `<div class="feat-name">الوحدات اللي تظهر للعميل</div>`;
       body.appendChild(head);
+      standard.forEach(addToggle);
 
-      catalog.forEach((f) => {
-        const enabled = c.feature_flags?.[f.key] !== false; // غائب = مفعّل
-        body.appendChild(toggleRow(f.label, enabled, async (val) => {
-          const { error } = await rpc("admin_set_company_feature", { p_company_id: c.id, p_key: f.key, p_state: val ? "inherit" : "off" });
-          if (error) { toast(error.message, "error"); return false; }
-          c.feature_flags = c.feature_flags || {};
-          if (val) delete c.feature_flags[f.key]; else c.feature_flags[f.key] = false;
-          toast("اتحفظ", "good", 1200); return true;
-        }));
-      });
+      if (optIn.length) {
+        const head2 = document.createElement("div");
+        head2.className = "feat-row head-row";
+        head2.innerHTML = `<div class="feat-name">وحدات مخصصة (اختيارية — موقوفة افتراضيًا)</div>`;
+        body.appendChild(head2);
+        optIn.forEach(addToggle);
+      }
       return el;
     }
 
