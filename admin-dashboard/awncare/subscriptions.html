@@ -240,6 +240,7 @@
         <div class="usage-head">
           <span class="muted">الباقة بتتجدد كل <b>${data.plan_period_days}</b> يوم — باقي <b>${data.days_until_renewal}</b> يوم</span>
           <div style="display:flex;gap:8px">
+            <button class="btn btn-neutral btn-sm" id="grant-addon"><i class="ti ti-plus"></i> رصيد إضافي</button>
             <button class="btn btn-neutral btn-sm" id="renew-now"><i class="ti ti-refresh"></i> تجديد الآن</button>
             <button class="btn btn-neutral btn-sm" id="edit-period"><i class="ti ti-calendar-cog"></i> مدة الدورة</button>
           </div>
@@ -255,6 +256,7 @@
               </div>`;
             }).join("")}`;
 
+      box.querySelector("#grant-addon").addEventListener("click", () => grantAddon(id, body));
       box.querySelector("#renew-now").addEventListener("click", async () => {
         const ok = await confirmDialog({ title: "تجديد الباقة الآن؟", icon: "ti-refresh", message: "هيتصفّر عداد الاستخدام من دلوقتي، وهيتحسب تاريخ التجديد الجاي من النهارده." });
         if (!ok) return;
@@ -264,6 +266,36 @@
         loadUsage(id, body);
       });
       box.querySelector("#edit-period").addEventListener("click", () => editPeriod(id, body, data.plan_period_days));
+    }
+
+    function grantAddon(id, body) {
+      const b = document.createElement("div");
+      b.innerHTML = `
+        <div class="field"><label class="lbl">الموديول</label>
+          <select id="ga-mod">
+            <option value="ed">الطوارئ</option>
+            <option value="round">الراوند</option>
+            <option value="clinic">العيادة</option>
+            <option value="followup">المتابعة</option>
+          </select>
+        </div>
+        <div class="field"><label class="lbl">الكمية الإضافية</label><input type="number" id="ga-amt" min="1" value="50"></div>
+        <div class="field"><label class="lbl">ملاحظة (اختياري)</label><input type="text" id="ga-note" placeholder="مثلاً: بيع تليفوني بتاريخ ..."></div>
+        <div class="hint">الرصيد ده بيتصفّر لوحده مع أول تجديد للباقة — مش دائم.</div>`;
+      const m = openModal({ title: "منح رصيد إضافي", icon: "ti-plus", body: b, actionsLeadSpacer: true, actions: [
+        { label: "إلغاء", variant: "btn-neutral", onClick: (c) => c() },
+        { label: "منح", icon: "ti-check", onClick: async (close) => {
+            const amt = parseInt(b.querySelector("#ga-amt").value, 10);
+            if (!amt || amt <= 0) { toast("رقم غير صالح", "error"); return; }
+            const btn = m.root.querySelector('[data-act="1"]'); const restore = busy(btn, "بيحفظ…");
+            const { error } = await sb.rpc("admin_grant_workspace_addon", {
+              p_workspace_id: id, p_module_key: b.querySelector("#ga-mod").value,
+              p_extra_amount: amt, p_note: b.querySelector("#ga-note").value.trim() || null,
+            });
+            if (error) { restore(); toast(error.message, "error"); return; }
+            close(); toast("اتحفظ الرصيد الإضافي", "good"); loadUsage(id, body);
+          } },
+      ]});
     }
 
     function editPeriod(id, body, current) {

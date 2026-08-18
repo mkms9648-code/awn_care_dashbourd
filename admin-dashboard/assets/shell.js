@@ -10,6 +10,7 @@ const NAV = {
     { key: "subscriptions", file: "subscriptions.html", label: "الاشتراكات والتحكم", icon: "ti-toggle-right-filled" },
     { key: "plans",         file: "plans.html",         label: "الباقات",           icon: "ti-package" },
     { key: "doctors",       file: "doctors.html",       label: "الأطباء والدخول",   icon: "ti-user-cog" },
+    { key: "nurses",        file: "nurses.html",        label: "الممرضين والدخول", icon: "ti-vaccine" },
     { key: "units",         file: "units.html",         label: "الأقسام",           icon: "ti-building-hospital" },
     { key: "viewas",        file: "view-as.html",       label: "تجربة الدكتور",     icon: "ti-eye" },
     { key: "announcements", file: "announcements.html", label: "الإعلانات",         icon: "ti-speakerphone" },
