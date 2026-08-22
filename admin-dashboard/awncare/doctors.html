@@ -16,6 +16,14 @@
     .ch-row { display: flex; align-items: center; gap: 12px; padding: 11px 2px; border-bottom: 1px solid var(--rule); }
     .ch-row:last-child { border-bottom: none; }
     .ch-info { flex: 1; }
+    /* نفس أنماط قسم الاستخدام في subscriptions.html — عشان تبان متناسقة */
+    .usage-mod { margin-bottom: 10px; }
+    .usage-mod:last-child { margin-bottom: 0; }
+    .usage-mod .um-top { display: flex; justify-content: space-between; font-size: .85em; margin-bottom: 4px; }
+    .usage-bar { height: 7px; border-radius: 100px; background: var(--paper); overflow: hidden; }
+    .usage-bar > div { height: 100%; background: var(--accent); border-radius: 100px; }
+    .usage-bar.warn > div { background: var(--warn, #C77700); }
+    .usage-bar.crit > div { background: var(--critical); }
   </style>
 </head>
 <body>
@@ -48,6 +56,8 @@
     import { client, requireAdmin, applyProductTheme, escapeHtml, fmtDate } from "../assets/core.js";
     import { renderShell } from "../assets/shell.js";
     import { openModal, confirmDialog, toast, buildMenu, copyToClipboard, busy } from "../assets/ui.js";
+
+    const MODULE_LABEL = { ed: "الطوارئ", round: "الراوند", clinic: "العيادة", followup: "المتابعة" };
 
     const PRODUCT = "awncare";
     applyProductTheme(PRODUCT);
@@ -133,6 +143,8 @@
       }
 
       const menu = buildMenu([
+        { label: "استخدام الباقة", icon: "ti-gauge", onClick: () => usageModal(d) },
+        { sep: true },
         { label: d.mobile_code ? "عرض كود الدخول" : "إصدار كود دخول", icon: "ti-key", onClick: () => issueLogin(d, false) },
         { label: "كود دخول جديد", icon: "ti-refresh", onClick: () => issueLogin(d, true) },
         { sep: true },
@@ -237,6 +249,42 @@
       }
       openModal({ title: "قنوات الدكتور", subtitle: d.full_name, icon: "ti-plug", body,
         actionsLeadSpacer: true, actions: [{ label: "تمام", onClick: (close) => close() }] });
+    }
+
+    // استخدام الباقة — الحصة مشتركة على مستوى مساحة العمل كلها، مش شخصية
+    // للدكتور، فبتوري نفس الأرقام لأي زميل في نفس مساحة العمل — ده متوقّع.
+    // التجديد وإضافة الرصيد بيتمّوا من صفحة "الاشتراكات والتحكم"، مش هنا.
+    async function usageModal(d) {
+      const body = document.createElement("div");
+      body.innerHTML = `<p class="muted">جاري التحميل…</p>`;
+      openModal({
+        title: "استخدام الباقة", subtitle: `${d.workspace_name} — ${d.org_name}`, icon: "ti-gauge",
+        body, actionsLeadSpacer: true,
+        actions: [{ label: "تمام", onClick: (close) => close() }],
+      });
+
+      const { data: usage, error } = await sb.rpc("admin_workspace_usage", { p_workspace_id: d.workspace_id });
+      if (error) { body.innerHTML = `<p class="error-msg">${escapeHtml(error.message)}</p>`; return; }
+
+      const mods = usage.modules || [];
+      body.innerHTML = `
+        <p class="hint" style="margin:0 0 12px">
+          الحصة دي مشتركة بين كل أطباء «${escapeHtml(d.workspace_name)}»، مش خاصة بـ ${escapeHtml(d.full_name)} لوحده.
+          الباقة بتتجدد بعد ${usage.days_until_renewal} يوم.
+        </p>
+        ${
+          mods.length === 0
+            ? `<div class="empty-state" style="padding:20px">مفيش حدود استخدام متحطّة على باقة العميل ده (بلا حد أقصى).</div>`
+            : mods.map((m) => {
+                const frac = m.max_per_period ? Math.min(1, m.used / m.max_per_period) : 0;
+                const cls = frac >= 1 ? "crit" : frac >= 0.9 ? "warn" : "";
+                return `<div class="usage-mod">
+                  <div class="um-top"><span>${MODULE_LABEL[m.module_key] || m.module_key}</span><span>${m.used} / ${m.max_per_period}</span></div>
+                  <div class="usage-bar ${cls}"><div style="width:${Math.round(frac * 100)}%"></div></div>
+                </div>`;
+              }).join("")
+        }
+        <div class="hint" style="margin-top:10px">عشان تجدّد الباقة أو تضيف رصيد إضافي، روح لصفحة «الاشتراكات والتحكم».</div>`;
     }
 
     // ---- إنشاء دكتور ----

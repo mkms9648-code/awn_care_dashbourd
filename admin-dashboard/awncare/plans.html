@@ -46,6 +46,7 @@
 
         <div class="toolbar">
           <div style="flex:1"></div>
+          <button class="btn btn-neutral" id="plan-requests-btn"><i class="ti ti-clipboard-list"></i> طلبات الباقات</button>
           <button class="btn" id="new-plan"><i class="ti ti-plus"></i> باقة جديدة</button>
         </div>
 
@@ -55,7 +56,7 @@
   </div>
 
   <script type="module">
-    import { client, requireAdmin, applyProductTheme, escapeHtml } from "../assets/core.js";
+    import { client, requireAdmin, applyProductTheme, escapeHtml, fmtDate } from "../assets/core.js";
     import { renderShell } from "../assets/shell.js";
     import { toast, openModal, busy, confirmDialog } from "../assets/ui.js";
 
@@ -71,11 +72,16 @@
     const fmtEgp = (n) => n == null ? "—" : n.toLocaleString("ar-EG") + " ج.م";
 
     let catalog = { features: [], plans: [] };
+    let workspaces = [];
 
     async function boot() {
-      const { data, error } = await sb.rpc("admin_feature_catalog");
-      if (error) { listEl.innerHTML = `<p class="error-msg">${escapeHtml(error.message)}</p>`; return; }
-      catalog = data || { features: [], plans: [] };
+      const [catRes, wsRes] = await Promise.all([
+        sb.rpc("admin_feature_catalog"),
+        sb.rpc("admin_workspaces_overview"),
+      ]);
+      if (catRes.error) { listEl.innerHTML = `<p class="error-msg">${escapeHtml(catRes.error.message)}</p>`; return; }
+      catalog = catRes.data || { features: [], plans: [] };
+      workspaces = wsRes.data || [];
       render();
     }
 
@@ -250,7 +256,103 @@
       boot();
     }
 
+    // ---- طلبات الباقات — تتبّع داخلي بسيط لطلبات "باقة جديدة" أو "تغيير اشتراك" ----
+    const KIND_LABEL = { new_plan: "باقة جديدة", subscription_change: "تغيير اشتراك" };
+    const REQ_STATUS_LABEL = { pending: "قيد الانتظار", approved: "موافَق عليه", rejected: "مرفوض" };
+    const REQ_STATUS_PILL = { pending: "pill-warning", approved: "pill-good", rejected: "pill-critical" };
+
+    function requestsModal() {
+      const box = document.createElement("div");
+      box.innerHTML = `
+        <div style="display:flex;justify-content:flex-end;margin-bottom:12px;">
+          <button class="btn btn-sm" id="new-req-btn"><i class="ti ti-plus"></i> طلب جديد</button>
+        </div>
+        <div id="req-list"><p class="muted">جاري التحميل…</p></div>`;
+      const reqList = box.querySelector("#req-list");
+
+      async function refresh() {
+        const { data, error } = await sb.rpc("admin_list_plan_requests");
+        if (error) { reqList.innerHTML = `<p class="error-msg">${escapeHtml(error.message)}</p>`; return; }
+        const reqs = data || [];
+        if (reqs.length === 0) { reqList.innerHTML = `<div class="empty-state" style="padding:20px">مفيش طلبات لسه.</div>`; return; }
+        reqList.innerHTML = "";
+        reqs.forEach((r) => reqList.appendChild(requestRow(r, refresh)));
+      }
+
+      box.querySelector("#new-req-btn").addEventListener("click", () => newRequestModal(refresh));
+      openModal({
+        title: "طلبات الباقات", icon: "ti-clipboard-list", wide: true, body: box, actionsLeadSpacer: true,
+        actions: [{ label: "تمام", onClick: (c) => c() }],
+      });
+      refresh();
+    }
+
+    function requestRow(r, refresh) {
+      const row = document.createElement("div");
+      row.className = "feat-row";
+      row.innerHTML = `
+        <div class="feat-info">
+          <div class="feat-name">
+            ${KIND_LABEL[r.kind] || r.kind}${r.requested_plan_name ? " — " + escapeHtml(r.requested_plan_name) : ""}
+            <span class="pill ${REQ_STATUS_PILL[r.status]}">${REQ_STATUS_LABEL[r.status]}</span>
+          </div>
+          <div class="hint">${r.workspace_name ? escapeHtml(r.workspace_name) + " — " + escapeHtml(r.org_name || "") : "طلب عام (بدون عميل محدد)"}</div>
+          ${r.details ? `<div class="hint">${escapeHtml(r.details)}</div>` : ""}
+          <div class="hint">${fmtDate(r.created_at)}</div>
+        </div>
+        <div class="row-actions"></div>`;
+      if (r.status === "pending") {
+        const acts = row.querySelector(".row-actions");
+        const okBtn = document.createElement("button"); okBtn.className = "btn btn-sm"; okBtn.textContent = "قبول";
+        okBtn.addEventListener("click", async () => {
+          const { error } = await sb.rpc("admin_resolve_plan_request", { p_request_id: r.id, p_status: "approved" });
+          if (error) { toast(error.message, "error"); return; }
+          toast("تم القبول", "good"); refresh();
+        });
+        const noBtn = document.createElement("button"); noBtn.className = "btn btn-sm btn-danger-outline"; noBtn.textContent = "رفض";
+        noBtn.addEventListener("click", async () => {
+          const { error } = await sb.rpc("admin_resolve_plan_request", { p_request_id: r.id, p_status: "rejected" });
+          if (error) { toast(error.message, "error"); return; }
+          toast("تم الرفض", "good"); refresh();
+        });
+        acts.appendChild(okBtn); acts.appendChild(noBtn);
+      }
+      return row;
+    }
+
+    function newRequestModal(onSaved) {
+      const wsOpts = ['<option value="">— بدون (طلب عام) —</option>']
+        .concat(workspaces.map((w) => `<option value="${escapeHtml(w.workspace_id)}">${escapeHtml(w.workspace_name)} — ${escapeHtml(w.org_name)}</option>`))
+        .join("");
+      const body = document.createElement("div");
+      body.innerHTML = `
+        <div class="field"><label class="lbl">العميل</label><select id="r-ws">${wsOpts}</select></div>
+        <div class="field"><label class="lbl">نوع الطلب</label>
+          <select id="r-kind"><option value="new_plan">طلب باقة جديدة</option><option value="subscription_change">طلب تغيير اشتراك</option></select></div>
+        <div class="field"><label class="lbl">اسم الباقة المطلوبة (اختياري)</label><input type="text" id="r-plan-name"></div>
+        <div class="field"><label class="lbl">تفاصيل</label><input type="text" id="r-details"></div>`;
+      const m = openModal({
+        title: "طلب باقة جديد", icon: "ti-plus", body, actionsLeadSpacer: true,
+        actions: [
+          { label: "إلغاء", variant: "btn-neutral", onClick: (c) => c() },
+          { label: "حفظ", icon: "ti-check", onClick: async (close) => {
+              const btn = m.root.querySelector('[data-act="1"]'); const restore = busy(btn, "بيحفظ…");
+              const { error } = await sb.rpc("admin_create_plan_request", {
+                p_workspace_id: body.querySelector("#r-ws").value || null,
+                p_kind: body.querySelector("#r-kind").value,
+                p_requested_plan_name: body.querySelector("#r-plan-name").value.trim() || null,
+                p_details: body.querySelector("#r-details").value.trim() || null,
+              });
+              if (error) { restore(); toast(error.message, "error"); return; }
+              close(); toast("اتسجّل الطلب", "good");
+              onSaved?.();
+            } },
+        ],
+      });
+    }
+
     document.getElementById("new-plan").addEventListener("click", newPlanModal);
+    document.getElementById("plan-requests-btn").addEventListener("click", requestsModal);
     boot();
   </script>
 </body>
